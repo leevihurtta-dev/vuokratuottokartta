@@ -234,23 +234,23 @@ input[type="range"] {
 /* ---------- Avattava sisältö-/SEO-osio ---------- */
 #about {
   position: fixed; right: 12px; bottom: 26px; z-index: 20;
-  max-width: min(380px, calc(100vw - 24px));
-  background: rgba(255, 255, 255, .94); backdrop-filter: blur(4px);
+  max-width: min(440px, calc(100vw - 24px));
+  background: rgba(255, 255, 255, .95); backdrop-filter: blur(4px);
   border-radius: var(--radius); box-shadow: var(--shadow);
-  font-size: 13px;
+  font-size: 14px;
 }
 #about summary {
-  cursor: pointer; padding: 9px 13px; font-weight: 600; font-size: 12.5px;
+  cursor: pointer; padding: 13px 18px; font-weight: 700; font-size: 14.5px;
   color: var(--petrol); list-style: none; user-select: none;
 }
 #about summary::-webkit-details-marker { display: none; }
-#about summary::before { content: "ⓘ "; }
-#about[open] { max-height: min(70dvh, 560px); overflow-y: auto; }
+#about summary::before { content: "ⓘ "; font-size: 15px; }
+#about[open] { max-height: min(72dvh, 620px); overflow-y: auto; }
 #about[open] summary { border-bottom: 1px solid var(--line); }
-.about-body { padding: 4px 14px 14px; line-height: 1.55; color: var(--ink); }
-.about-body h2 { font-size: 14px; margin: 14px 0 4px; }
-.about-body p { margin: 0 0 8px; }
-.about-links { font-size: 12px; color: var(--ink-soft); }
+.about-body { padding: 6px 18px 18px; line-height: 1.6; color: var(--ink); }
+.about-body h2 { font-size: 15.5px; margin: 16px 0 5px; }
+.about-body p { margin: 0 0 10px; }
+.about-links { font-size: 13px; color: var(--ink-soft); }
 
 /* ---------- Info-dialogi ---------- */
 #info {
@@ -295,10 +295,12 @@ input[type="range"] {
      alle, jottei se peitä alalaidan "Haku ja asetukset" -nappia. */
   #about {
     right: 10px; bottom: auto; top: 64px; left: auto;
-    max-width: min(260px, calc(100vw - 20px));
+    max-width: min(300px, calc(100vw - 20px));
+    font-size: 13.5px;
   }
   body.has-banner #about { top: 116px; }
-  #about[open] { max-height: 60dvh; }
+  #about summary { padding: 11px 15px; font-size: 13.5px; }
+  #about[open] { max-height: 62dvh; }
 
   /* Kompaktimpi popup mobiilissa: pienemmät fontit ja tiiviimmät välit,
      jotta tietoruutu ei peitä suurta osaa ruudusta. */
