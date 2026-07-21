@@ -85,7 +85,12 @@ function fillFilter() {
   const f = ["all",
     ["==", ["typeof", ["get", "brutto_pct"]], "number"],
     [">=", ["get", "brutto_pct"], state.minBrutto],
-    [">=", ["coalesce", ["get", "n_kaupat"], 0], state.minKaupat],
+    // Kauppasuodatin koskee vain postinumerotason hintatietoa: kuntatason
+    // keskiarvolla täydennetyillä alueilla postinumerokohtaista kauppa-
+    // määrää ei ole olemassa (peitetty), eikä niitä pidä pudottaa siksi.
+    ["any",
+      ["==", ["get", "hinta_taso"], "kunta"],
+      [">=", ["coalesce", ["get", "n_kaupat"], 0], state.minKaupat]],
   ];
   // Vanhoissa datatiedostoissa taso-kenttää ei ole -> coalesce "pno".
   if (!state.allowKunta) {
@@ -154,6 +159,13 @@ function popupHTML(p) {
   // Kuntatason keskiarvolla täydennetyt arvot merkitään.
   const lvl = (v, taso) =>
     (v !== null && taso === "kunta") ? `${v}\u00a0(kunta)` : v;
+  // Lukumäärärivit: jos itse arvo (hinta/vuokra) on olemassa mutta
+  // lukumäärä puuttuu (esim. peitetty tai kuntataulukossa ei julkaista),
+  // näytetään "–" eikä harhaanjohtavaa "ei dataa".
+  const cnt = (n, val, taso) => {
+    if (typeof n === "number") return lvl(fmt(n, 0), taso);
+    return (val !== null && val !== undefined) ? "–" : null;
+  };
   const kuntaFallback =
     p.hinta_taso === "kunta" || p.vuokra_taso === "kunta";
 
@@ -170,8 +182,8 @@ function popupHTML(p) {
       ${row("Nettotuotto*", fmt(netto, 2, " %"), "big")}
       ${row("Neliöhinta", lvl(fmt(p.hinta_eur_m2, 0, " €/m²"), p.hinta_taso))}
       ${row("Keskineliövuokra", lvl(fmt(p.vuokra_eur_m2, 2, " €/m²/kk"), p.vuokra_taso))}
-      ${row("Kauppoja", lvl(fmt(p.n_kaupat, 0), p.hinta_taso))}
-      ${row("Vuokrahavaintoja", lvl(fmt(p.n_vuokrat, 0), p.vuokra_taso))}
+      ${row("Kauppoja", cnt(p.n_kaupat, p.hinta_eur_m2, p.hinta_taso))}
+      ${row("Vuokrahavaintoja", cnt(p.n_vuokrat, p.vuokra_eur_m2, p.vuokra_taso))}
       ${row("Väkiluku", fmt(p.vakiluku, 0))}
       ${row("Mediaanitulo", fmt(p.mediaanitulo, 0, " €/v"))}
     </dl>
