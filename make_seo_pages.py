@@ -169,6 +169,8 @@ def page(title, description, canonical, body, breadcrumb="", jsonld=None):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>{CSS}</style>
+<script data-goatcounter="https://lerpou.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 <main>

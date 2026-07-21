@@ -64,11 +64,11 @@
     <label class="slider-label" for="f-brutto">
       Bruttotuotto vähintään <output id="f-brutto-out">0,0&nbsp;%</output>
     </label>
-    <input id="f-brutto" type="range" min="0" max="8" step="0.5" value="0">
+    <input id="f-brutto" type="range" min="0" max="15" step="0.5" value="0">
     <label class="slider-label" for="f-kaupat">
       Kauppoja vähintään <output id="f-kaupat-out">0</output>
     </label>
-    <input id="f-kaupat" type="range" min="0" max="50" step="1" value="0">
+    <input id="f-kaupat" type="range" min="0" max="150" step="5" value="0">
     <label class="check-row">
       <input id="f-kunta" type="checkbox" checked>
       <span>Täydennä peitetyt alueet kuntatason keskiarvolla</span>
@@ -132,5 +132,8 @@
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="app.js"></script>
+<!-- Kävijäseuranta (GoatCounter, ei evästeitä, ei henkilötietoja) -->
+<script data-goatcounter="https://lerpou.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
