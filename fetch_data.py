@@ -4,15 +4,20 @@
 fetch_data.py — Vanhojen osakeasuntojen bruttovuokratuotto postinumeroalueittain.
 
 Hakee Tilastokeskuksen avoimesta datasta (CC BY 4.0):
-  1) Vanhojen osakeasuntojen neliöhinnat postinumeroittain (statfin_ashi_pxt_13mt)
-  2) Vapaarahoitteisten vuokra-asuntojen keskineliövuokrat (statfin_asvu_pxt_13eb)
+  1) Vanhojen osakeasuntojen neliöhinnat postinumeroittain, VUOSITASOLLA
+     (ashi 13mu; varalla neljännestaulukko 13mt, jonka vuoden neljännekset
+     yhdistetään kauppamäärillä painotettuna keskiarvona)
+  2) Vapaarahoitteisten vuokra-asuntojen keskineliövuokrat postinumeroittain
+     (asvu 13eb, neljännekset) — vuoden neljännekset yhdistetään painotettuna
+     keskiarvona
   3) Postinumeroalueiden geometriat + Paavo-taustatiedot (geo.stat.fi WFS)
 
 Yhdistää postinumerolla, laskee brutto- ja nettovuokratuoton ja kirjoittaa
 staattisen postal_yields.geojson-tiedoston frontendille.
 
-Kattavuus: postinumerotason hinta/vuokra on usein peitetty (esim. alle 20
-vuokrahavaintoa), joten peitetyt arvot täydennetään oletuksena saman kunnan
+Kattavuus: data kohdistetaan KOKO VUODELLE, koska neljännestasolla kauppoja
+ja vuokrahavaintoja on niin vähän, että valtaosa alueista on peitetty.
+Silti peitetyiksi jäävät arvot täydennetään oletuksena saman kunnan
 keskiarvolla kuntatason taulukoista. Täydennetyt arvot merkitään
 ominaisuuksiin (hinta_taso/vuokra_taso/taso = 'kunta') ja frontend näyttää
 niistä huomautuksen. Poista käytöstä: --no-fallback.
@@ -21,7 +26,7 @@ Käyttö (rakennusjärjestyksen mukaisesti):
   python fetch_data.py --test 00120        # Vaihe 1: yhden postinumeron arvot
   python fetch_data.py --intermediate      # Vaihe 2: tallenna välitiedosto
   python fetch_data.py                     # Vaiheet 2–3: koko maa -> GeoJSON
-  python fetch_data.py --kausi 2026Q1      # pakota tietty vuosineljännes
+  python fetch_data.py --kausi 2025        # pakota tietty vuosi
   python fetch_data.py --simplify 0        # älä yksinkertaista geometriaa
   python fetch_data.py --talotyyppi kerrostalot --huoneluku yksiot   # (edistynyt)
 
@@ -47,6 +52,15 @@ USER_AGENT = "vuokratuottokartta/1.0 (avoin data; PxWeb + Paavo WFS)"
 
 # PxWeb-API:n polkurakenne on vaihdellut vuosien varrella, joten kokeillaan
 # useampaa kandidaattia ja käytetään ensimmäistä, joka palauttaa metatiedot.
+#
+# Hinnat haetaan ensisijaisesti VUOSITASON postinumerotaulukosta: neljännes-
+# tasolla kauppoja on niin vähän, että valtaosa alueista on peitetty
+# (havaittu ajossa: arvo vain 253/1724 alueella). 13mu on 13mt:n
+# vuositason vastinpari (aikamuuttujan arvot 2023, 2024, 2025, …).
+PRICE_TABLE_ANNUAL_CANDIDATES = [
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mu.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mu.px",
+]
 PRICE_TABLE_CANDIDATES = [
     # Kansio + lyhyt tunniste — verifioitu toimivaksi pxdata.stat.fi:ssä 7/2026:
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mt.px",
@@ -70,22 +84,22 @@ RENT_TABLE_CANDIDATES = [
     "https://statfin.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13eb.px",
 ]
 
-# Kuntatason varataulukot: kun postinumerotason hinta tai vuokra on peitetty
-# (esim. alle 20 vuokrahavaintoa), täydennetään saman kunnan keskiarvolla,
-# jotta tärkeimmät alueet eivät jää harmaiksi. Tarkkoja taulukkotunnisteita
-# ei kovakoodata sokeasti: jos suorat osoitteet eivät toimi, resolve_table
-# etsii kansiolistauksesta taulukon, jonka nimessä on 'kunnittain'.
+# Kuntatason varataulukot: kun postinumerotason hinta tai vuokra on peitetty,
+# täydennetään saman kunnan keskiarvolla, jotta tärkeimmät alueet eivät jää
+# harmaiksi. Jos suorat osoitteet eivät toimi, resolve_table etsii
+# kansiolistauksesta taulukon hakusanoilla, ja taulukon kelpoisuus
+# varmistetaan (siinä on oltava kunta/alue-muuttuja).
 PRICE_MUNI_TABLE_CANDIDATES = [
-    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mu.px",
-    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mu.px",
-    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/112p.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mv.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mv.px",
 ]
 RENT_MUNI_TABLE_CANDIDATES = [
-    # Uudistettu vuokratilasto (28.4.2026 alkaen) julkaisee kuntatason
-    # aktiivisessa kannassa; arkistokanta varalle.
-    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/13ea.px",
-    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13ea.px",
-    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/asvu/13ea.px",
+    # 15fa = uudistetun vuokratilaston "Vuokraindeksi ja keskineliövuokrat,
+    # neljännesvuosittain" (aluetasolla; havaittu API:n kansiolistauksesta).
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/15fa.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_15fa.px",
+    # Arkistoitu vastine varalle (2015Q1–2025Q4):
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/asvu/statfinpas_asvu_pxt_11x4_2025q4.px",
 ]
 
 # pno_tilasto = rantaviivalla leikatut alueet + Paavo-tilastot valmiiksi mukana.
@@ -157,16 +171,40 @@ def post_json(url, payload):
 # PxWeb: metatiedot ja arvokoodien selvitys (EI kovakoodattuja koodeja)
 # ----------------------------------------------------------------------------
 
-def resolve_table(candidates, label, needles=()):
+def _table_ok(meta, require_vars, require_time):
+    """Tarkistaa, että taulukossa on vaaditut muuttujat ja oikea aikataso
+    ('annual' = vuodet, 'quarterly' = vuosineljännekset)."""
+    try:
+        for needles in (require_vars or ()):
+            find_variable(meta, *needles)
+        if require_time:
+            tvar = time_variable(meta)
+            pat = r"\d{4}" if require_time == "annual" else r"\d{4}Q\d"
+            if not any(re.fullmatch(pat, str(v)) for v in tvar["values"]):
+                return False
+    except SystemExit:
+        return False
+    return True
+
+
+def resolve_table(candidates, label, needles=(), require_vars=None,
+                  require_time=None):
     """Palauttaa (url, metatiedot) ensimmäiselle toimivalle API-osoitteelle.
 
     Jos mikään suora osoite ei toimi, listataan kansion taulukot rajapinnasta
-    ja etsitään taulukko tunnisteen tai nimen perusteella (needles)."""
+    ja etsitään taulukko tunnisteen tai nimen perusteella (needles).
+    require_vars/require_time: hylkää taulukot, joista puuttuu vaadittu
+    muuttuja tai joilla on väärä aikataso (esim. neljännestaulukko, kun
+    tarvitaan vuositaso)."""
     errors = []
     for url in candidates:
         try:
             meta = get_json(url)
             if isinstance(meta, dict) and "variables" in meta:
+                if not _table_ok(meta, require_vars, require_time):
+                    errors.append(f"{url}: taulukko ei täytä vaatimuksia "
+                                  f"(muuttujat tai aikataso)")
+                    continue
                 print(f"[{label}] Taulukko löytyi: {url}")
                 return url, meta
             errors.append(f"{url}: odottamaton vastaus")
@@ -200,6 +238,10 @@ def resolve_table(candidates, label, needles=()):
             try:
                 meta = get_json(turl)
                 if isinstance(meta, dict) and "variables" in meta:
+                    if not _table_ok(meta, require_vars, require_time):
+                        errors.append(f"{turl}: taulukko ei täytä vaatimuksia "
+                                      f"(muuttujat tai aikataso)")
+                        continue
                     print(f"[{label}] Taulukko löytyi kansiolistauksen kautta: "
                           f"{turl} ({entry.get('text', '')!r})")
                     return turl, meta
@@ -264,16 +306,52 @@ def pick_value(var, include, exclude=(), required=True):
 
 
 TALOTYYPPI_HAKUSANAT = {
-    "yhteensa": ["talotyypit yhteensä", "kaikki talotyypit", "yhteensä"],
-    "kerrostalot": ["kerrostalot yhteensä", "kerrostalo yhteensä", "kerrostalo"],
-    "rivitalot": ["rivitalot yhteensä", "rivitalo yhteensä", "rivitalo"],
+    # HUOM: pelkkä "yhteensä" poistettu tarkoituksella — se osui vahingossa
+    # arvoon "Rivitalot yhteensä", kun taulukossa ei ollut kaikkien
+    # talotyyppien yhteensä-luokkaa.
+    "yhteensa": ["talotyypit yhteensä", "kaikki talotyypit"],
+    "kerrostalot": ["kerrostalot yhteensä", "kerrostalot"],
+    "rivitalot": ["rivitalot yhteensä", "rivitalot"],
+}
+TALOTYYPPI_SUODATIN = {
+    "yhteensa": None, "kerrostalot": "kerrostalo", "rivitalot": "rivitalo",
 }
 HUONELUKU_HAKUSANAT = {
-    "yhteensa": ["huoneluvut yhteensä", "kaikki huoneluvut", "yhteensä"],
-    "yksiot": ["yksiö"],
-    "kaksiot": ["kaksio"],
-    "kolmiot": ["kolme", "kolmio", "3h"],
+    "yhteensa": ["huoneluvut yhteensä", "kaikki huoneluvut"],
+    "yksiot": ["yksiöt", "yksiö"],
+    "kaksiot": ["kaksiot", "kaksio"],
+    "kolmiot": ["kolmiot+", "kolmiot", "kolmio", "3h"],
 }
+HUONELUKU_SUODATIN = {
+    "yhteensa": None, "yksiot": "yksiö", "kaksiot": "kaksio",
+    "kolmiot": "kolmi",
+}
+
+
+def class_codes_for(var, choice, hakusanat, suodatin):
+    """Palauttaa (koodilista, kuvausteksti) luokkamuuttujalle.
+
+    Jos taulukossa on valmis luokka (esim. 'Talotyypit yhteensä'), käytetään
+    sitä. Muuten palautetaan kaikki valintaan sopivat luokat — esim.
+    'yhteensa' -> kaikki talotyypit, 'kerrostalot' -> kaikki
+    kerrostalo-luokat — ja arvo lasketaan niistä havaintomäärillä
+    painotettuna keskiarvona (fetch_pxweb hoitaa painotuksen)."""
+    picked = pick_value(var, hakusanat[choice], required=False)
+    if picked is not None:
+        return [picked[0]], picked[1]
+    word = suodatin[choice]
+    pairs = list(zip(var["values"], var["valueTexts"]))
+    if word is not None:
+        matching = [(c, t) for c, t in pairs if word in t.lower()]
+        if not matching:
+            raise SystemExit(
+                f"Muuttujasta {var.get('code')} ei löytynyt luokkaa "
+                f"valinnalle {choice!r}. Saatavilla: {var['valueTexts']}")
+        pairs = matching
+    codes = [c for c, _ in pairs]
+    if len(pairs) == 1:
+        return codes, pairs[0][1]
+    return codes, "painotettu keskiarvo: " + ", ".join(t for _, t in pairs)
 
 
 # ----------------------------------------------------------------------------
@@ -324,19 +402,19 @@ def category_labels(ds, dim_id):
 # PxWeb-haut
 # ----------------------------------------------------------------------------
 
-def fetch_pxweb(url, meta, kausi, area_codes, class_var, class_codes,
+def fetch_pxweb(url, meta, kaudet, area_codes, class_var, class_codes,
                 value_code, count_code, label,
                 area_needles=("postinumero",), code_pattern=r"\d{5}"):
-    """Hakee yhden taulukon yhdelle vuosineljännekselle.
+    """Hakee yhden taulukon yhdelle tai useammalle kaudelle.
 
-    class_codes: lista luokka-arvoja (esim. huoneluvut). Jos useita, arvo
-    lasketaan havaintomäärillä painotettuna keskiarvona (näin saadaan
-    "yhteensä", vaikka taulukossa ei olisi valmista yhteensä-luokkaa).
+    kaudet: lista aikamuuttujan arvoja (esim. ["2025"] tai vuoden neljä
+    neljännestä). Jos kausia tai luokka-arvoja (class_codes) on useita,
+    arvo lasketaan havaintomäärillä painotettuna keskiarvona — näin koko
+    vuoden data yhdistyy, vaikka taulukko olisi neljännestasoinen, ja
+    "yhteensä" saadaan, vaikka valmista yhteensä-luokkaa ei olisi.
 
-    area_needles/code_pattern: aluemuuttujan tunnistus — oletuksena
-    postinumero (5 numeroa), kuntatason varataulukoille ("kunta", "alue")
-    ja koodit KUxxx tai xxx. count_code voi olla None, jos taulukossa ei
-    ole havaintomäärää.
+    class_var voi olla None, jos taulukossa ei ole luokkajakoa.
+    count_code voi olla None, jos taulukossa ei ole havaintomäärää.
 
     Palauttaa: dict aluekoodi -> {"arvo": float|None, "n": int|None,
                                    "label": "00120 Punavuori (Helsinki)"}
@@ -349,37 +427,42 @@ def fetch_pxweb(url, meta, kausi, area_codes, class_var, class_codes,
     if count_code and count_code != value_code:
         tiedot_values.append(count_code)
 
-    query = {
-        "query": [
-            {"code": tvar["code"],
-             "selection": {"filter": "item", "values": [kausi]}},
-            {"code": pvar["code"],
-             "selection": {"filter": "item", "values": area_codes}},
+    query_items = [
+        {"code": tvar["code"],
+         "selection": {"filter": "item", "values": list(kaudet)}},
+        {"code": pvar["code"],
+         "selection": {"filter": "item", "values": area_codes}},
+    ]
+    if class_var is not None:
+        query_items.append(
             {"code": class_var["code"],
-             "selection": {"filter": "item", "values": list(class_codes)}},
-            {"code": ivar["code"],
-             "selection": {"filter": "item", "values": tiedot_values}},
-        ],
-        "response": {"format": "json-stat2"},
-    }
-    print(f"[{label}] Haetaan {len(area_codes)} aluetta, kausi {kausi}…")
+             "selection": {"filter": "item", "values": list(class_codes)}})
+    query_items.append(
+        {"code": ivar["code"],
+         "selection": {"filter": "item", "values": tiedot_values}})
+    query = {"query": query_items, "response": {"format": "json-stat2"}}
+
+    print(f"[{label}] Haetaan {len(area_codes)} aluetta, "
+          f"kaudet: {', '.join(kaudet)}…")
     ds = post_json(url, query)
     get = jsonstat_reader(ds)
     labels = category_labels(ds, pvar["code"])
 
     out = {}
     for code in area_codes:
-        if not re.fullmatch(code_pattern, code):
+        if not re.fullmatch(code_pattern, str(code)):
             continue  # ohita mahdolliset koostealueet
         pairs = []
-        for cc in class_codes:
-            coords = {tvar["code"]: kausi, pvar["code"]: code,
-                      class_var["code"]: cc}
-            arvo = get(**coords, **{ivar["code"]: value_code})
-            n = (get(**coords, **{ivar["code"]: count_code})
-                 if len(tiedot_values) > 1 else None)
-            if arvo is not None:
-                pairs.append((float(arvo), int(n) if n is not None else None))
+        for kk in kaudet:
+            for cc in (class_codes if class_var is not None else [None]):
+                coords = {tvar["code"]: kk, pvar["code"]: code}
+                if class_var is not None:
+                    coords[class_var["code"]] = cc
+                arvo = get(**coords, **{ivar["code"]: value_code})
+                n = (get(**coords, **{ivar["code"]: count_code})
+                     if len(tiedot_values) > 1 else None)
+                if arvo is not None:
+                    pairs.append((float(arvo), int(n) if n is not None else None))
         if not pairs:
             arvo_out, n_out = None, None
         elif len(pairs) == 1:
@@ -446,59 +529,82 @@ def with_fallback(primary, fallback):
 def fetch_muni_fallback(kind, kausi, class_choice):
     """Hakee kuntatason hinnat tai vuokrat peitettyjen alueiden täydentämiseksi.
 
-    kind: 'hinnat' | 'vuokrat'. Palauttaa (data, info), missä data on
-    dict kuntakoodi ('091') -> {"arvo", "n", "label"} ja info kuvaa käytetyn
-    taulukon ja kauden. Nostaa poikkeuksen, jos dataa ei saada — kutsuja
-    saa jatkaa ilman varadataa."""
+    kind: 'hinnat' | 'vuokrat'. kausi: vuosi, esim. '2025'. Palauttaa
+    (data, info), missä data on dict, jonka avaimina on sekä kuntakoodi
+    ('091') että kunnan nimi pienillä kirjaimilla ('helsinki') — osa
+    taulukoista käyttää koodeja, osa nimiä. Nostaa poikkeuksen, jos dataa
+    ei saada — kutsuja saa jatkaa ilman varadataa."""
     if kind == "hinnat":
         candidates = PRICE_MUNI_TABLE_CANDIDATES
+        needles = ["kunnittain"]
         class_needles = ("talotyyppi",)
-        hakusanat = TALOTYYPPI_HAKUSANAT[class_choice]
-        include, exclude = ["neliöhinta"], ["lukumäärä", "muutos", "indeksi"]
+        hakusanat, suodatin = TALOTYYPPI_HAKUSANAT, TALOTYYPPI_SUODATIN
+        include = ["neliöhinta"]
+        exclude = ["lukumäärä", "muutos", "indeksi", "jakauma"]
     else:
         candidates = RENT_MUNI_TABLE_CANDIDATES
+        needles = ["keskineliövuokrat", "kunnittain", "alueittain"]
         class_needles = ("huoneluku", "huoneistotyyppi")
-        hakusanat = HUONELUKU_HAKUSANAT[class_choice]
-        include, exclude = ["vuokra"], ["lukumäärä", "muutos", "indeksi"]
+        hakusanat, suodatin = HUONELUKU_HAKUSANAT, HUONELUKU_SUODATIN
+        include = ["keskineliövuokra", "neliövuokra", "vuokra"]
+        exclude = ["lukumäärä", "muutos", "indeksi", "jakauma"]
 
     label = f"{kind}/kunta"
-    url, meta = resolve_table(candidates, label, needles=["kunnittain"])
+    url, meta = resolve_table(candidates, label, needles=needles,
+                              require_vars=[("kunta", "alue"), ("tiedot",)])
 
+    # Kausi: sama vuosi (vuositaso tai vuoden neljännekset yhdistettynä);
+    # jos vuotta ei ole taulukossa, uusin saatavilla oleva.
     tvar = time_variable(meta)
-    quarters = [v for v in tvar["values"] if re.fullmatch(r"\d{4}Q\d", v)]
-    if not quarters:
-        raise RuntimeError(
-            f"taulukossa {url} ei ole vuosineljännestasoa "
-            f"(aikamuuttujan viimeiset arvot: {tvar['values'][-3:]})")
-    muni_kausi = kausi if kausi in quarters else quarters[-1]
-    if muni_kausi != kausi:
-        print(f"[{label}] Kautta {kausi} ei ole taulukossa — "
-              f"käytetään lähintä saatavilla olevaa: {muni_kausi}.")
+    vals = [str(v) for v in tvar["values"]]
+    periods = ([v for v in vals if v == kausi]
+               or [v for v in vals if re.fullmatch(rf"{kausi}Q\d", v)])
+    if not periods:
+        years = sorted({m.group(1) for v in vals
+                        for m in [re.match(r"^(\d{4})(?:Q\d)?$", v)] if m})
+        if not years:
+            raise RuntimeError(f"taulukon {url} aikamuuttujaa ei tunnistettu "
+                               f"(viimeiset arvot: {vals[-3:]})")
+        y = years[-1]
+        periods = ([v for v in vals if v == y]
+                   or [v for v in vals if re.fullmatch(rf"{y}Q\d", v)])
+        print(f"[{label}] Vuotta {kausi} ei ole taulukossa — "
+              f"käytetään lähintä saatavilla olevaa: {y}.")
 
     avar = find_variable(meta, "kunta", "alue")
-    codes = [c for c in avar["values"] if re.fullmatch(r"KU\d{3}|\d{3}", c)]
-    if not codes:  # tuntematon koodimuoto -> otetaan kaikki paitsi koko maa
-        codes = [c for c in avar["values"] if c.upper() != "SSS"]
+    codes = [c for c in avar["values"]
+             if re.fullmatch(r"KU\d{3}|\d{3}", str(c))]
+    if not codes:  # tuntematon koodimuoto -> kaikki paitsi koko maa
+        codes = [c for c in avar["values"] if str(c).upper() != "SSS"]
 
-    cvar = find_variable(meta, *class_needles)
-    picked = pick_value(cvar, hakusanat, required=False)
-    class_codes = [picked[0]] if picked else list(cvar["values"])
+    # Luokkajako (talotyyppi/huoneluku) voi puuttua kokonaan.
+    try:
+        cvar = find_variable(meta, *class_needles)
+    except SystemExit:
+        cvar, ccodes = None, None
+    else:
+        ccodes, _ = class_codes_for(cvar, class_choice, hakusanat, suodatin)
 
     ivar = find_variable(meta, "tiedot")
     value_code, _ = pick_value(ivar, include, exclude=exclude)
     cnt = pick_value(ivar, ["lukumäärä"], required=False)
     count_code = cnt[0] if cnt else None
 
-    data = fetch_pxweb(url, meta, muni_kausi, codes, cvar, class_codes,
+    data = fetch_pxweb(url, meta, periods, codes, cvar, ccodes,
                        value_code, count_code, label,
-                       area_needles=("kunta", "alue"),
-                       code_pattern=r"KU\d{3}|\d{3}")
-    out = {normalize_kunta(c): v for c, v in data.items()
-           if v["arvo"] is not None}
+                       area_needles=("kunta", "alue"), code_pattern=r".+")
+    out = {}
+    for c, v in data.items():
+        if v["arvo"] is None:
+            continue
+        out[normalize_kunta(c)] = v
+        name = str(v.get("label") or "").strip().lower()
+        if name:
+            out.setdefault(name, v)
     if not out:
         raise RuntimeError(f"kuntatason taulukko {url} ei palauttanut arvoja "
-                           f"kaudelle {muni_kausi}")
-    return out, {"taulukko": url, "kausi": muni_kausi}
+                           f"kausille {periods}")
+    return out, {"taulukko": url, "kaudet": periods}
 
 
 # ----------------------------------------------------------------------------
@@ -590,8 +696,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--test", metavar="POSTINUMERO",
                     help="Testaa yhdellä postinumerolla (esim. 00120) ja lopeta.")
-    ap.add_argument("--kausi", help="Vuosineljännes, esim. 2026Q1. "
-                                    "Oletus: uusin molemmista taulukoista löytyvä.")
+    ap.add_argument("--kausi", help="Vuosi, esim. 2025. Oletus: uusin vuosi, "
+                                    "jolta on sekä hinta- että vuokradataa.")
     ap.add_argument("--talotyyppi", default="yhteensa",
                     choices=sorted(TALOTYYPPI_HAKUSANAT))
     ap.add_argument("--huoneluku", default="yhteensa",
@@ -608,50 +714,85 @@ def main():
     args = ap.parse_args()
 
     # --- Metatiedot ja arvokoodit ------------------------------------------
-    price_url, price_meta = resolve_table(
-        PRICE_TABLE_CANDIDATES, "hinnat", needles=["13mt", "postinumero"])
+    # Hinnat: ensisijaisesti vuositason postinumerotaulukko (neljännestasolla
+    # valtaosa alueista on peitetty vähäisten kauppamäärien vuoksi).
+    price_annual = True
+    try:
+        price_url, price_meta = resolve_table(
+            PRICE_TABLE_ANNUAL_CANDIDATES, "hinnat",
+            needles=["13mu", "postinumero"],
+            require_vars=[("postinumero",), ("talotyyppi",), ("tiedot",)],
+            require_time="annual")
+    except SystemExit:
+        print("HUOM: vuositason hintataulukkoa ei löytynyt — käytetään "
+              "neljännestaulukkoa ja yhdistetään vuoden neljännekset itse.")
+        price_annual = False
+        price_url, price_meta = resolve_table(
+            PRICE_TABLE_CANDIDATES, "hinnat", needles=["13mt", "postinumero"],
+            require_vars=[("postinumero",)], require_time="quarterly")
     rent_url, rent_meta = resolve_table(
-        RENT_TABLE_CANDIDATES, "vuokrat", needles=["13eb", "postinumero"])
+        RENT_TABLE_CANDIDATES, "vuokrat", needles=["13eb", "postinumero"],
+        require_vars=[("postinumero",)], require_time="quarterly")
 
     talotyyppi_var = find_variable(price_meta, "talotyyppi")
-    talotyyppi_code, talotyyppi_text = pick_value(
-        talotyyppi_var, TALOTYYPPI_HAKUSANAT[args.talotyyppi])
+    talotyyppi_codes, talotyyppi_text = class_codes_for(
+        talotyyppi_var, args.talotyyppi,
+        TALOTYYPPI_HAKUSANAT, TALOTYYPPI_SUODATIN)
     p_tiedot = find_variable(price_meta, "tiedot")
     price_value_code, price_value_text = pick_value(
         p_tiedot, ["neliöhinta"], exclude=["lukumäärä", "muutos", "indeksi"])
-    price_count_code, _ = pick_value(p_tiedot, ["lukumäärä"])
+    pc = pick_value(p_tiedot, ["lukumäärä"], required=False)
+    price_count_code = pc[0] if pc else None
 
     huoneluku_var = find_variable(rent_meta, "huoneluku", "huoneistotyyppi")
-    picked = pick_value(huoneluku_var, HUONELUKU_HAKUSANAT[args.huoneluku],
-                        required=(args.huoneluku != "yhteensa"))
-    if picked is not None:
-        huoneluku_codes = [picked[0]]
-        huoneluku_text = picked[1]
-    else:
-        # Taulukossa ei ole yhteensä-luokkaa -> haetaan kaikki huoneluvut ja
-        # lasketaan havaintomäärillä painotettu keskiarvo postinumeroittain.
-        huoneluku_codes = list(huoneluku_var["values"])
-        huoneluku_text = ("painotettu keskiarvo: "
-                          + ", ".join(huoneluku_var["valueTexts"]))
+    huoneluku_codes, huoneluku_text = class_codes_for(
+        huoneluku_var, args.huoneluku,
+        HUONELUKU_HAKUSANAT, HUONELUKU_SUODATIN)
     r_tiedot = find_variable(rent_meta, "tiedot")
     rent_value_code, rent_value_text = pick_value(
         r_tiedot, ["vuokra"], exclude=["lukumäärä", "muutos", "indeksi"])
-    rent_count_code, _ = pick_value(r_tiedot, ["lukumäärä"])
+    rc = pick_value(r_tiedot, ["lukumäärä"], required=False)
+    rent_count_code = rc[0] if rc else None
 
     print(f"[hinnat]  Talotyyppi: {talotyyppi_text!r}, tieto: {price_value_text!r}")
     print(f"[vuokrat] Huoneluku: {huoneluku_text!r}, tieto: {rent_value_text!r}")
 
-    # --- Vuosineljännes -----------------------------------------------------
-    price_quarters = set(time_variable(price_meta)["values"])
-    rent_quarters = set(time_variable(rent_meta)["values"])
-    common = sorted(price_quarters & rent_quarters)
+    # --- Kausi: kokonainen vuosi -------------------------------------------
+    # Neljännestasolla kauppoja/havaintoja on vähän ja peittoa paljon, joten
+    # data kohdistetaan koko vuodelle: hinnat vuositaulukosta (tai neljännekset
+    # yhdistäen), vuokrat vuoden neljänneksistä painotettuna keskiarvona.
+    def _years_of(values):
+        return {m.group(1) for v in values
+                for m in [re.match(r"^(\d{4})(?:Q\d)?$", str(v))] if m}
+
+    price_times = [str(v) for v in time_variable(price_meta)["values"]]
+    rent_times = [str(v) for v in time_variable(rent_meta)["values"]]
+    common = sorted(_years_of(price_times) & _years_of(rent_times))
     if not common:
-        raise SystemExit("Taulukoilla ei ole yhteisiä vuosineljänneksiä!")
-    kausi = args.kausi or common[-1]
-    if kausi not in common:
-        raise SystemExit(f"Kausi {kausi} ei ole molemmissa taulukoissa. "
-                         f"Uusimmat yhteiset: {common[-4:]}")
-    print(f"Käytetään vuosineljännestä: {kausi}")
+        raise SystemExit("Taulukoilla ei ole yhteisiä vuosia!")
+    if args.kausi:
+        m = re.match(r"^\s*(\d{4})", str(args.kausi))
+        if not m:
+            raise SystemExit(f"--kausi: anna vuosi, esim. 2025 "
+                             f"(sain {args.kausi!r})")
+        kausi = m.group(1)
+        if kausi != str(args.kausi).strip():
+            print(f"HUOM: kausi tulkittiin koko vuodeksi {kausi} "
+                  f"({args.kausi!r}).")
+        if kausi not in common:
+            raise SystemExit(f"Vuosi {kausi} ei ole molemmissa taulukoissa. "
+                             f"Yhteiset vuodet: {common[-6:]}")
+    else:
+        kausi = common[-1]
+    price_periods = ([kausi] if price_annual
+                     else [t for t in price_times
+                           if re.fullmatch(rf"{kausi}Q\d", t)])
+    rent_periods = [t for t in rent_times if re.fullmatch(rf"{kausi}Q\d", t)]
+    if not rent_periods:
+        raise SystemExit(f"Vuokrataulukossa ei ole neljänneksiä vuodelle "
+                         f"{kausi}.")
+    print(f"Käytetään vuotta {kausi} (hinnat: {', '.join(price_periods)}; "
+          f"vuokrat: {', '.join(rent_periods)})")
 
     price_codes = [c for c in find_variable(price_meta, "postinumero")["values"]
                    if re.fullmatch(r"\d{5}", c)]
@@ -661,11 +802,11 @@ def main():
     # --- Vaihe 1: yhden postinumeron testi ---------------------------------
     if args.test:
         code = args.test
-        prices = fetch_pxweb(price_url, price_meta, kausi,
+        prices = fetch_pxweb(price_url, price_meta, price_periods,
                              [code] if code in price_codes else price_codes[:1],
-                             talotyyppi_var, [talotyyppi_code],
+                             talotyyppi_var, talotyyppi_codes,
                              price_value_code, price_count_code, "hinnat")
-        rents = fetch_pxweb(rent_url, rent_meta, kausi,
+        rents = fetch_pxweb(rent_url, rent_meta, rent_periods,
                             [code] if code in rent_codes else rent_codes[:1],
                             huoneluku_var, huoneluku_codes,
                             rent_value_code, rent_count_code, "vuokrat")
@@ -680,10 +821,10 @@ def main():
         return
 
     # --- Vaihe 2: koko maan hinnat ja vuokrat ------------------------------
-    prices = fetch_pxweb(price_url, price_meta, kausi, price_codes,
-                         talotyyppi_var, [talotyyppi_code],
+    prices = fetch_pxweb(price_url, price_meta, price_periods, price_codes,
+                         talotyyppi_var, talotyyppi_codes,
                          price_value_code, price_count_code, "hinnat")
-    rents = fetch_pxweb(rent_url, rent_meta, kausi, rent_codes,
+    rents = fetch_pxweb(rent_url, rent_meta, rent_periods, rent_codes,
                         huoneluku_var, huoneluku_codes,
                         rent_value_code, rent_count_code, "vuokrat")
 
@@ -731,11 +872,17 @@ def main():
         p = prices.get(code, {})
         r = rents.get(code, {})
         kcode = normalize_kunta(props.get("kunta"))
-        mp = muni_prices.get(kcode)
-        mr = muni_rents.get(kcode)
+        label = p.get("label") or r.get("label") or ""
+        kunta_nimi = (kunta_from_label(label)
+                      or (muni_prices.get(kcode) or {}).get("label")
+                      or (muni_rents.get(kcode) or {}).get("label")
+                      or props.get("kunta"))
+        kname = str(kunta_nimi or "").strip().lower()
+        # osa kuntataulukoista käyttää koodeja, osa nimiä -> molemmat avaimet
+        mp = muni_prices.get(kcode) or (muni_prices.get(kname) if kname else None)
+        mr = muni_rents.get(kcode) or (muni_rents.get(kname) if kname else None)
         hinta, n_kaupat, hinta_taso = with_fallback(p, mp)
         vuokra, n_vuokrat, vuokra_taso = with_fallback(r, mr)
-        label = p.get("label") or r.get("label") or ""
 
         brutto = brutto_pct(hinta, vuokra)
         taso = None
@@ -745,10 +892,6 @@ def main():
                     else "kunta")
             if taso == "kunta":
                 n_fallback += 1
-
-        kunta_nimi = (kunta_from_label(label)
-                      or ((mp or mr) or {}).get("label")
-                      or props.get("kunta"))
 
         out_features.append({
             "type": "Feature",
@@ -776,6 +919,8 @@ def main():
         "type": "FeatureCollection",
         "metadata": {
             "kausi": kausi,
+            "hintakaudet": price_periods,
+            "vuokrakaudet": rent_periods,
             "talotyyppi": talotyyppi_text,
             "huoneluku": huoneluku_text,
             "generoitu": _dt.date.today().isoformat(),

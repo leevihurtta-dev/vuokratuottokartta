@@ -27,7 +27,7 @@ suorituskykyongelmia).
 ```bash
 # 1) Hae oikea data (vaatii verkkoyhteyden pxdata.stat.fi- ja geo.stat.fi-osoitteisiin)
 pip install shapely            # valinnainen mutta vahvasti suositeltu (ks. alla)
-python fetch_data.py           # → postal_yields.geojson (uusin yhteinen neljännes)
+python fetch_data.py           # → postal_yields.geojson (uusin yhteinen vuosi)
 
 # 2) Käynnistä paikallinen palvelin ja avaa selain
 python -m http.server 8000
@@ -47,15 +47,15 @@ jotta kartan voi avata heti ilman verkkoyhteyttä Tilastokeskukseen. Frontend
 tunnistaa demo-datan (`metadata.demo: true`) ja näyttää varoitusbannerin.
 Banneri katoaa, kun tiedosto korvataan ajamalla `fetch_data.py`.
 
-## Datan päivitys uudelle vuosineljännekselle
+## Datan päivitys uudelle vuodelle
 
-Aja pipeline uudelleen — se valitsee automaattisesti uusimman neljänneksen,
-joka löytyy sekä hinta- että vuokrataulukosta, ja kirjoittaa
+Aja pipeline uudelleen — se valitsee automaattisesti uusimman vuoden,
+jolta löytyy sekä hinta- että vuokradataa, ja kirjoittaa
 `postal_yields.geojson`-tiedoston yli:
 
 ```bash
-python fetch_data.py                  # uusin yhteinen neljännes
-python fetch_data.py --kausi 2026Q1   # tai pakota tietty neljännes
+python fetch_data.py                  # uusin yhteinen vuosi
+python fetch_data.py --kausi 2025     # tai pakota tietty vuosi
 ```
 
 Muita hyödyllisiä valitsimia:
@@ -77,13 +77,19 @@ polkurakenne muuttuu, päivitä `PRICE_TABLE_CANDIDATES`/`RENT_TABLE_CANDIDATES`
 
 ## Datalähteet
 
-1. **Neliöhinnat** — StatFin `statfin_ashi_pxt_13mt`: vanhojen osakeasuntojen
-   neliöhinnat ja kauppojen lukumäärät postinumeroalueittain,
-   neljännesvuosittain (PxWeb, json-stat2).
+1. **Neliöhinnat** — StatFin `statfin_ashi_pxt_13mu` (vuositaso): vanhojen
+   osakeasuntojen neliöhinnat ja kauppojen lukumäärät postinumeroalueittain.
+   Käytetään **koko vuoden** dataa, koska neljännestasolla kauppoja on niin
+   vähän, että valtaosa alueista on peitetty. Jos vuositaulukkoa ei löydy,
+   varalla on neljännestaulukko `13mt`, jonka vuoden neljännekset
+   yhdistetään kauppamäärillä painotettuna keskiarvona. Ilman valmista
+   "Talotyypit yhteensä" -luokkaa kaikki talotyypit yhdistetään vastaavasti
+   painotettuna.
 2. **Vuokrat** — StatFin `statfin_asvu_pxt_13eb`: vapaarahoitteisten
-   vuokra-asuntojen keskineliövuokrat postinumeroalueittain. **Tieto on
-   peitetty**, jos havaintoja on alle 20 tai vuokrataloyhtiöiden osuus on
-   suuri.
+   vuokra-asuntojen keskineliövuokrat postinumeroalueittain,
+   neljännesvuosittain. Valitun vuoden neljännekset yhdistetään
+   havaintomäärillä painotettuna keskiarvona. **Tieto on peitetty**, jos
+   havaintoja on alle 20 tai vuokrataloyhtiöiden osuus on suuri.
 3. **Kuntatason varadata** — kun postinumerotason hinta tai vuokra on
    peitetty, arvo täydennetään oletuksena saman kunnan keskiarvolla
    (StatFinin kunnittaiset hinta- ja vuokrataulukot; pipeline etsii ne
@@ -103,7 +109,7 @@ polkurakenne muuttuu, päivitä `PRICE_TABLE_CANDIDATES`/`RENT_TABLE_CANDIDATES`
 
 Liitosavain on 5-numeroinen postinumerokoodi (PxWebin koodi, ei selite;
 geometriassa kenttä `posti_alue`). Hinta- ja vuokradatalle kohdistetaan sama
-vuosineljännes.
+vuosi.
 
 ## Laskenta
 
