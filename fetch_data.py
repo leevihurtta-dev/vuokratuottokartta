@@ -339,6 +339,13 @@ def class_codes_for(var, choice, hakusanat, suodatin):
     picked = pick_value(var, hakusanat[choice], required=False)
     if picked is not None:
         return [picked[0]], picked[1]
+    if choice == "yhteensa":
+        # Turvallinen erikoistapaus: luokka, jonka teksti on TÄSMÄLLEEN
+        # "Yhteensä" (osumaa "Rivitalot yhteensä" -tyyppisiin ei sallita —
+        # se aiheutti aiemmin väärän luokan valinnan).
+        for c, t in zip(var["values"], var["valueTexts"]):
+            if t.strip().lower() == "yhteensä":
+                return [c], t
     word = suodatin[choice]
     pairs = list(zip(var["values"], var["valueTexts"]))
     if word is not None:
