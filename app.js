@@ -411,11 +411,19 @@ function initMap(data) {
       },
     });
 
-    // Klikkaus -> popup (myös harmaat alueet, jotta "ei dataa" on tutkittavissa)
+    // Klikkaus -> popup (myös harmaat alueet, jotta "ei dataa" on tutkittavissa).
+    // Saman alueen klikkaus uudelleen sulkee popupin (ruksin lisäksi).
     map.on("click", (e) => {
       const feats = map.queryRenderedFeatures(e.point,
         { layers: ["postal-fill", "postal-base"] });
-      if (feats.length) openPopup(e.lngLat, feats[0].properties);
+      if (!feats.length) return;
+      const code = feats[0].properties.posti_alue;
+      if (popup && popup.isOpen() && popupProps
+          && popupProps.posti_alue === code) {
+        popup.remove();
+        return;
+      }
+      openPopup(e.lngLat, feats[0].properties);
     });
 
     // Hover-korostus

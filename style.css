@@ -269,7 +269,42 @@ input[type="range"] {
 
   #legend { bottom: auto; top: 64px; left: 10px; padding: 8px 10px; font-size: 11px; }
   body.has-banner #legend { top: 116px; }
-  .maplibregl-popup { max-width: min(320px, 88vw) !important; }
+
+  /* Kompaktimpi popup mobiilissa: pienemmät fontit ja tiiviimmät välit,
+     jotta tietoruutu ei peitä suurta osaa ruudusta. */
+  .maplibregl-popup { max-width: min(280px, 82vw) !important; }
+  .maplibregl-popup-content { padding: 11px 13px 10px; }
+  .pp-title { font-size: 14px; }
+  .pp-kunta { margin-bottom: 7px; }
+  .pp-scale { margin: 2px 0 7px; }
+  .pp-grid { gap: 2px 10px; font-size: 12px; }
+  .pp-grid dd.big { font-size: 13px; }
+  .pp-warn { margin-top: 7px; font-size: 11px; padding: 5px 7px; }
+  .maplibregl-popup .hint { font-size: 10.5px; }
+}
+
+/* Vaakataso / matala näyttö (esim. puhelin käännettynä): leveys voi ylittää
+   720px, jolloin mobiilisäännöt eivät muuten laukea ja "Haku ja asetukset"
+   -nappi jäisi piiloon. Ankkuroidaan nappi ja paneeli näytön reunoille myös
+   tässä tilanteessa. */
+@media (max-height: 520px) {
+  #panel-toggle {
+    top: auto; bottom: 12px; left: 12px; transform: none;
+    padding: 8px 14px; font-size: 13px;
+  }
+  body.has-banner #panel-toggle { top: auto; }
+  #panel {
+    top: 8px; left: 8px; bottom: 8px; right: auto;
+    width: min(320px, 60vw);
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--radius);
+    transform: translateX(0);
+  }
+  body.has-banner #panel { top: 8px; }
+  #panel.closed { transform: translateX(-110%); opacity: 0; }
+  #brand { top: 8px; right: 8px; padding: 5px 9px; }
+  #brand h1 { font-size: 14px; }
+  #legend { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
