@@ -272,6 +272,16 @@ function doSearch() {
   map.once("moveend", () => openPopup(hit.center, hit.props));
 }
 
+function focusFromHash() {
+  const m = (window.location.hash || "").match(/^#(\d{5})$/);
+  if (!m) return;
+  const hit = searchIndex.find((e) => e.code === m[1]);
+  if (!hit || !map) return;
+  map.fitBounds([[hit.bbox[0], hit.bbox[1]], [hit.bbox[2], hit.bbox[3]]],
+    { padding: 70, maxZoom: 12.5, duration: 0 });
+  map.once("idle", () => openPopup(hit.center, hit.props));
+}
+
 // ---------------------------------------------------------------------------
 // Paneeli ja säätimet
 // ---------------------------------------------------------------------------
@@ -428,6 +438,10 @@ function initMap(data) {
         hoveredId = null;
       }
     });
+
+    // Aluesivujen linkit: /#00530 kohdistaa kartan suoraan alueeseen.
+    focusFromHash();
+    window.addEventListener("hashchange", focusFromHash);
 
     $("loading").classList.add("hidden");
   });

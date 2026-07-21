@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+make_seo_pages.py — Generoi staattiset SEO-sivut postal_yields.geojson-datasta.
+
+Tuottaa:
+  alue/<postinumero>/index.html   — oma sivu jokaiselle alueelle, jolla on tuotto
+  kunta/<kunta-slug>/index.html   — kuntahakemisto (alueet tuottojärjestyksessä)
+  alueet/index.html               — kaikkien kuntien hakemisto + top-listat
+  sitemap.xml, robots.txt         — hakukoneita varten
+
+Ajetaan GitHub Actions -workflow'ssa heti fetch_data.py:n perään, jolloin
+sivut päivittyvät automaattisesti aina datan mukana.
+
+Käyttö: python make_seo_pages.py
+"""
+import datetime as _dt
+import html
+import json
+import os
+import re
+import shutil
+import sys
+
+BASE_URL = "https://vuokratuottokartta.fi"
+DATA_FILE = "postal_yields.geojson"
+OUT_DIRS = ("alue", "kunta", "alueet")
+
+CSS = """
+:root{--paper:#f6f7f4;--ink:#1d2733;--soft:#55606c;--petrol:#0e5f57;
+--line:#d8dcd6;--warn-bg:#fdf3dd;--warn:#8a5a12}
+*{box-sizing:border-box}body{margin:0;font-family:"Space Grotesk",system-ui,
+sans-serif;background:var(--paper);color:var(--ink);line-height:1.55}
+main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
+a{color:var(--petrol)}h1{font-size:26px;line-height:1.2;margin:8px 0 2px}
+.crumb{font-size:13px;color:var(--soft)}.lead{color:var(--soft);margin:2px 0 18px}
+.big{font-size:40px;font-weight:700;color:var(--petrol);margin:6px 0 2px}
+.biglabel{font-size:13px;color:var(--soft);text-transform:uppercase;
+letter-spacing:.06em}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+color:var(--soft)}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.btn{display:inline-block;background:var(--petrol);color:#fff;font-weight:600;
+padding:11px 18px;border-radius:8px;text-decoration:none;margin:10px 0}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:8px;
+padding:10px 12px;font-size:13.5px;margin:14px 0}
+footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
+font-size:12.5px;color:var(--soft)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+gap:6px;padding:0;margin:12px 0;list-style:none}
+.grid a{text-decoration:none}
+"""
+
+
+def esc(s):
+    return html.escape(str(s if s is not None else ""))
+
+
+def slugify(name):
+    s = str(name or "").strip().lower()
+    s = (s.replace("ä", "a").replace("ö", "o").replace("å", "a")
+          .replace("é", "e").replace("ü", "u"))
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s or "muu"
+
+
+def fnum(v, dec=0, unit=""):
+    if v is None:
+        return "–"
+    s = f"{v:,.{dec}f}".replace(",", " ").replace(".", ",")
+    return s + ("\u00a0" + unit if unit else "")
+
+
+def page(title, description, canonical, body, breadcrumb=""):
+    return f"""<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc(title)}</title>
+<meta name="description" content="{esc(description)}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:title" content="{esc(title)}">
+<meta property="og:description" content="{esc(description)}">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>{CSS}</style>
+</head>
+<body>
+<main>
+<p class="crumb"><a href="/">Vuokratuottokartta</a>{breadcrumb}</p>
+{body}
+<footer>
+Luvut ovat Tilastokeskuksen avoimesta datasta laskettuja alueellisia
+keskiarvoja (CC BY 4.0) eivätkä ole sijoitusneuvontaa. Bruttotuotto =
+keskineliövuokra × 12 ÷ neliöhinta. Yksittäisten asuntojen tuotot voivat
+poiketa merkittävästi alueen keskiarvosta.
+</footer>
+</main>
+</body>
+</html>"""
+
+
+def taso_mark(p):
+    return " ※" if p.get("taso") == "kunta" else ""
+
+
+def area_page(p, kausi):
+    code, nimi, kunta = p["posti_alue"], p.get("nimi") or p["posti_alue"], p.get("kunta") or ""
+    kslug = slugify(kunta)
+    title = f"Vuokratuotto {nimi} ({code}), {kunta} — {fnum(p['brutto_pct'], 2)} %"
+    desc = (f"{nimi} ({code}), {kunta}: bruttovuokratuotto "
+            f"{fnum(p['brutto_pct'], 2)} %, neliöhinta {fnum(p['hinta_eur_m2'])} €/m², "
+            f"keskineliövuokra {fnum(p['vuokra_eur_m2'], 2)} €/m²/kk. "
+            f"Tilastovuosi {kausi}, lähde Tilastokeskus.")
+    rows = [
+        ("Bruttovuokratuotto", fnum(p["brutto_pct"], 2, "%") + taso_mark(p)),
+        ("Nettotuotto (oletuksilla)", fnum(p["netto_pct"], 2, "%")),
+        ("Neliöhinta", fnum(p["hinta_eur_m2"], 0, "€/m²")
+         + (" ※" if p.get("hinta_taso") == "kunta" else "")),
+        ("Keskineliövuokra", fnum(p["vuokra_eur_m2"], 2, "€/m²/kk")
+         + (" ※" if p.get("vuokra_taso") == "kunta" else "")),
+        ("Asuntokauppoja", fnum(p["n_kaupat"])),
+        ("Vuokrahavaintoja", fnum(p["n_vuokrat"])),
+        ("Väkiluku", fnum(p["vakiluku"])),
+        ("Talouksien mediaanitulo", fnum(p["mediaanitulo"], 0, "€/v")),
+    ]
+    trs = "\n".join(f"<tr><th>{esc(a)}</th><td class=num>{b}</td></tr>"
+                    for a, b in rows)
+    note = ""
+    if p.get("taso") == "kunta":
+        note = ('<p class="note">※ Postinumerotason tieto on tietosuojasyistä '
+                'peitetty, joten merkityissä luvuissa on käytetty koko kunnan '
+                'keskiarvoa. Se tasoittaa alueiden välisiä eroja — tulkitse '
+                'suuntaa-antavana.</p>')
+    small = ""
+    if ((isinstance(p.get("n_kaupat"), (int, float)) and p["n_kaupat"] < 10) or
+            (isinstance(p.get("n_vuokrat"), (int, float)) and p["n_vuokrat"] < 30)):
+        small = ('<p class="note">Pieni otos — alueen keskiarvot ovat '
+                 'epävarmoja.</p>')
+    body = f"""
+<h1>{esc(nimi)} <span style="color:var(--petrol)">{esc(code)}</span></h1>
+<p class="lead"><a href="/kunta/{kslug}/">{esc(kunta)}</a> · tilastovuosi {esc(kausi)}</p>
+<p class="biglabel">Bruttovuokratuotto</p>
+<p class="big">{fnum(p["brutto_pct"], 2, "%")}</p>
+<a class="btn" href="/#{esc(code)}">Näytä kartalla</a>
+<table>{trs}</table>
+{note}{small}
+<p>Vertaa muihin alueisiin: <a href="/kunta/{kslug}/">kaikki kunnan
+{esc(kunta)} postinumeroalueet</a> tai <a href="/alueet/">koko Suomen
+hakemisto</a>. Nettotuoton oletuksia (hoitovastike, vajaakäyttö,
+varainsiirtovero) voit säätää itse <a href="/#{esc(code)}">kartalla</a>.</p>"""
+    bc = f' › <a href="/kunta/{kslug}/">{esc(kunta)}</a> › {esc(code)}'
+    return page(title, desc, f"{BASE_URL}/alue/{code}/", body, bc)
+
+
+def kunta_page(kunta, areas, kausi):
+    kslug = slugify(kunta)
+    areas = sorted(areas, key=lambda p: p["brutto_pct"], reverse=True)
+    title = f"Vuokratuotot {kunta} postinumeroittain — {len(areas)} aluetta"
+    desc = (f"Asuntojen bruttovuokratuotot kunnassa {kunta} "
+            f"postinumeroalueittain, tilastovuosi {kausi}. "
+            f"Korkein {fnum(areas[0]['brutto_pct'], 2)} %, "
+            f"matalin {fnum(areas[-1]['brutto_pct'], 2)} %.")
+    trs = "\n".join(
+        f'<tr><td><a href="/alue/{p["posti_alue"]}/">{p["posti_alue"]} '
+        f'{esc(p.get("nimi") or "")}</a></td>'
+        f'<td class=num>{fnum(p["brutto_pct"], 2, "%")}{taso_mark(p)}</td>'
+        f'<td class=num>{fnum(p["hinta_eur_m2"], 0, "€/m²")}</td>'
+        f'<td class=num>{fnum(p["vuokra_eur_m2"], 2, "€/m²")}</td>'
+        f'<td class=num>{fnum(p["n_kaupat"])}</td></tr>'
+        for p in areas)
+    body = f"""
+<h1>Vuokratuotot: {esc(kunta)}</h1>
+<p class="lead">{len(areas)} postinumeroaluetta · tilastovuosi {esc(kausi)} ·
+järjestetty bruttotuoton mukaan</p>
+<table>
+<tr><th>Alue</th><th class=num>Brutto</th><th class=num>Hinta</th>
+<th class=num>Vuokra</th><th class=num>Kauppoja</th></tr>
+{trs}
+</table>
+<p class="note">※ = luvussa on käytetty kuntatason keskiarvoa, koska
+postinumerotason tieto on peitetty.</p>
+<p><a class="btn" href="/">Avaa koko kartta</a></p>"""
+    bc = f' › {esc(kunta)}'
+    return page(title, desc, f"{BASE_URL}/kunta/{kslug}/", body, bc)
+
+
+def index_page(by_kunta, all_areas, kausi):
+    top = sorted((p for p in all_areas
+                  if isinstance(p.get("n_kaupat"), (int, float))
+                  and p["n_kaupat"] >= 20 and p.get("taso") == "pno"),
+                 key=lambda p: p["brutto_pct"], reverse=True)[:20]
+    toprs = "\n".join(
+        f'<tr><td><a href="/alue/{p["posti_alue"]}/">{p["posti_alue"]} '
+        f'{esc(p.get("nimi") or "")}</a> ({esc(p.get("kunta") or "")})</td>'
+        f'<td class=num>{fnum(p["brutto_pct"], 2, "%")}</td>'
+        f'<td class=num>{fnum(p["n_kaupat"])}</td></tr>'
+        for p in top)
+    kuntas = "\n".join(
+        f'<li><a href="/kunta/{slugify(k)}/">{esc(k)} '
+        f'({len(v)})</a></li>'
+        for k, v in sorted(by_kunta.items()))
+    title = "Vuokratuotot postinumeroittain — koko Suomen hakemisto"
+    desc = (f"Asuntojen bruttovuokratuotot koko Suomessa postinumeroalueittain "
+            f"ja kunnittain, tilastovuosi {kausi}. "
+            f"{len(all_areas)} aluetta, {len(by_kunta)} kuntaa. "
+            f"Data: Tilastokeskus.")
+    body = f"""
+<h1>Vuokratuotot alueittain</h1>
+<p class="lead">{len(all_areas)} postinumeroaluetta · {len(by_kunta)} kuntaa ·
+tilastovuosi {esc(kausi)}</p>
+<p><a class="btn" href="/">Avaa kartta</a></p>
+<h2>Korkeimmat bruttotuotot (väh. 20 kauppaa, postinumerotason data)</h2>
+<table>
+<tr><th>Alue</th><th class=num>Brutto</th><th class=num>Kauppoja</th></tr>
+{toprs}
+</table>
+<h2>Kunnat</h2>
+<ul class="grid">{kuntas}</ul>"""
+    return page(title, desc, f"{BASE_URL}/alueet/", body, " › Alueet")
+
+
+def main():
+    if not os.path.exists(DATA_FILE):
+        raise SystemExit(f"{DATA_FILE} puuttuu — aja ensin fetch_data.py")
+    with open(DATA_FILE, encoding="utf-8") as f:
+        fc = json.load(f)
+    meta = fc.get("metadata", {})
+    kausi = meta.get("kausi", "")
+    if meta.get("demo"):
+        print("VAROITUS: data on demo-dataa — sivut generoidaan silti, "
+              "mutta aja fetch_data.py ennen julkaisua.")
+
+    areas = [ft["properties"] for ft in fc.get("features", [])
+             if ft.get("properties", {}).get("brutto_pct") is not None]
+    if not areas:
+        raise SystemExit("Datassa ei ole yhtään aluetta, jolla on tuotto.")
+
+    # Siivoa vanhat generoinnit, jotta poistuneet alueet eivät jää roikkumaan.
+    for d in OUT_DIRS:
+        shutil.rmtree(d, ignore_errors=True)
+
+    urls = [f"{BASE_URL}/", f"{BASE_URL}/alueet/"]
+    by_kunta = {}
+    for p in areas:
+        by_kunta.setdefault(str(p.get("kunta") or "Muu"), []).append(p)
+
+    for p in areas:
+        d = os.path.join("alue", p["posti_alue"])
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+            f.write(area_page(p, kausi))
+        urls.append(f"{BASE_URL}/alue/{p['posti_alue']}/")
+
+    for kunta, plist in by_kunta.items():
+        d = os.path.join("kunta", slugify(kunta))
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+            f.write(kunta_page(kunta, plist, kausi))
+        urls.append(f"{BASE_URL}/kunta/{slugify(kunta)}/")
+
+    os.makedirs("alueet", exist_ok=True)
+    with open(os.path.join("alueet", "index.html"), "w", encoding="utf-8") as f:
+        f.write(index_page(by_kunta, areas, kausi))
+
+    today = _dt.date.today().isoformat()
+    sm = ['<?xml version="1.0" encoding="UTF-8"?>',
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    sm += [f"<url><loc>{u}</loc><lastmod>{today}</lastmod></url>" for u in urls]
+    sm.append("</urlset>")
+    with open("sitemap.xml", "w", encoding="utf-8") as f:
+        f.write("\n".join(sm))
+    with open("robots.txt", "w", encoding="utf-8") as f:
+        f.write(f"User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\n")
+
+    print(f"Generoitu: {len(areas)} aluesivua, {len(by_kunta)} kuntasivua, "
+          f"hakemisto, sitemap.xml ({len(urls)} osoitetta) ja robots.txt.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)
