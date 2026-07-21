@@ -379,15 +379,31 @@ function initMap(data) {
   map.on("load", () => {
     map.addSource("postal", { type: "geojson", data, generateId: true });
 
-    // Etsi pohjakartan ensimmäinen tekstitaso (paikannimet), jotta väri- ja
-    // rajakerrokset voidaan lisätä sen ALLE. Näin kaupunkien ja alueiden
-    // nimet jäävät näkyviin värialueiden päälle (käyttäjäpalaute).
-    let firstLabelId;
-    for (const lyr of map.getStyle().layers) {
-      if (lyr.type === "symbol" && lyr.layout && lyr.layout["text-field"]) {
-        firstLabelId = lyr.id;
+    // Mihin kohtaan tasopinoa väri- ja rajakerrokset asetetaan:
+    // tavoite on, että värit peittävät pohjakartan tiet ja maankäytön, mutta
+    // paikannimet (kaupungit, kaupunginosat) jäävät värien PÄÄLLE näkyviin.
+    // Positronissa on joitakin tekstitasoja jo ennen teitä, joten emme voi
+    // vain hakea "ensimmäistä tekstitasoa" (silloin värit menivät teiden alle).
+    // Etsitään ensimmäinen varsinainen PAIKANNIMITASO (place_/poi_/watername_)
+    // ja asetetaan värit sen alle; tiet piirretään ennen tätä, joten ne jäävät
+    // värien alle.
+    const layers = map.getStyle().layers;
+    let beforeId;
+    for (const lyr of layers) {
+      if (lyr.type !== "symbol" || !lyr.layout || !lyr.layout["text-field"]) {
+        continue;
+      }
+      if (/^(place|poi|watername|water_name|place_label|poi_label)/.test(lyr.id)) {
+        beforeId = lyr.id;
         break;
       }
+    }
+    // Varmuuden vuoksi: jos nimeämiskäytäntö poikkeaa, otetaan viimeinen
+    // symbol-taso (kaikki tekstit jäävät silloin varmasti päälle).
+    if (!beforeId) {
+      const syms = layers.filter(
+        (l) => l.type === "symbol" && l.layout && l.layout["text-field"]);
+      beforeId = syms.length ? syms[0].id : undefined;
     }
 
     // Pohjakerros: kaikki alueet harmaana ("ei dataa" / suodatettu jää näkyviin)
@@ -396,7 +412,7 @@ function initMap(data) {
       type: "fill",
       source: "postal",
       paint: { "fill-color": NODATA_COLOR, "fill-opacity": 0.5 },
-    }, firstLabelId);
+    }, beforeId);
     // Värikerros: vain alueet, joilla on data ja jotka läpäisevät suodattimet
     map.addLayer({
       id: "postal-fill",
@@ -409,7 +425,7 @@ function initMap(data) {
           "case", ["boolean", ["feature-state", "hover"], false], 0.92, 0.72,
         ],
       },
-    }, firstLabelId);
+    }, beforeId);
     map.addLayer({
       id: "postal-line",
       type: "line",
@@ -420,7 +436,20 @@ function initMap(data) {
           "case", ["boolean", ["feature-state", "hover"], false], 2, 0.6,
         ],
       },
-    }, firstLabelId);
+    }, beforeId);
+
+    // Tummenna pohjakartan paikannimet, jotta ne erottuvat värialueiden
+    // päältä paremmin (käyttäjäpalaute). Koskee vain nimitekstejä, ei teitä.
+    for (const lyr of layers) {
+      if (lyr.type === "symbol" && lyr.layout && lyr.layout["text-field"]
+          && /^(place|poi|watername|water_name|place_label|poi_label)/.test(lyr.id)) {
+        try {
+          map.setPaintProperty(lyr.id, "text-color", "#1d2733");
+          map.setPaintProperty(lyr.id, "text-halo-color", "#ffffff");
+          map.setPaintProperty(lyr.id, "text-halo-width", 1.4);
+        } catch (e) { /* taso voi puuttua joissakin tyyleissä */ }
+      }
+    }
 
     // Klikkaus -> popup (myös harmaat alueet, jotta "ei dataa" on tutkittavissa).
     // Saman alueen klikkaus uudelleen sulkee popupin (ruksin lisäksi).
