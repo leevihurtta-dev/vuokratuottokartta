@@ -96,7 +96,14 @@ def _request(url, data=None, retries=4, timeout=180):
                 print(f"  HTTP {e.code}, yritetään uudelleen {wait} s kuluttua…")
                 time.sleep(wait)
                 continue
-            raise
+            try:
+                body = e.read().decode("utf-8", "replace").strip()[:300]
+            except Exception:  # noqa: BLE001
+                body = ""
+            msg = f"HTTP {e.code} {e.reason}"
+            if body:
+                msg += f" — palvelimen selitys: {body!r}"
+            raise RuntimeError(msg) from None
         except (urllib.error.URLError, TimeoutError) as e:
             last_err = e
             if attempt < retries - 1:
@@ -118,8 +125,11 @@ def post_json(url, payload):
 # PxWeb: metatiedot ja arvokoodien selvitys (EI kovakoodattuja koodeja)
 # ----------------------------------------------------------------------------
 
-def resolve_table(candidates, label):
-    """Palauttaa (url, metatiedot) ensimmäiselle toimivalle API-osoitteelle."""
+def resolve_table(candidates, label, needles=()):
+    """Palauttaa (url, metatiedot) ensimmäiselle toimivalle API-osoitteelle.
+
+    Jos mikään suora osoite ei toimi, listataan kansion taulukot rajapinnasta
+    ja etsitään taulukko tunnisteen tai nimen perusteella (needles)."""
     errors = []
     for url in candidates:
         try:
@@ -130,6 +140,43 @@ def resolve_table(candidates, label):
             errors.append(f"{url}: odottamaton vastaus")
         except Exception as e:  # noqa: BLE001 - raportoidaan kootusti
             errors.append(f"{url}: {e}")
+
+    # Itsekorjaus: kysytään rajapinnalta, mitä taulukoita kansiossa oikeasti on.
+    listings = []
+    for url in candidates:
+        base = url.rsplit("/", 1)[0]
+        if base not in listings:
+            listings.append(base)
+    for base in listings:
+        try:
+            entries = get_json(base)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{base} (kansiolistaus): {e}")
+            continue
+        if not isinstance(entries, list):
+            continue
+        tables = [e for e in entries if e.get("type", "t") in ("t", "T")]
+        matches = [e for e in tables
+                   if any(n.lower() in (str(e.get("id", "")) + " "
+                                        + str(e.get("text", ""))).lower()
+                          for n in needles)] or tables
+        for entry in matches:
+            tid = str(entry.get("id", ""))
+            if not tid:
+                continue
+            turl = base + "/" + (tid if tid.endswith(".px") else tid + ".px")
+            try:
+                meta = get_json(turl)
+                if isinstance(meta, dict) and "variables" in meta:
+                    print(f"[{label}] Taulukko löytyi kansiolistauksen kautta: "
+                          f"{turl} ({entry.get('text', '')!r})")
+                    return turl, meta
+                errors.append(f"{turl}: odottamaton vastaus")
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{turl}: {e}")
+        print(f"[{label}] Kansion {base} taulukot: "
+              + "; ".join(f"{e.get('id')}={e.get('text', '')!r}"
+                          for e in tables[:20]))
     raise SystemExit(
         f"[{label}] Taulukon metatietoja ei saatu mistään kandidaatista:\n  "
         + "\n  ".join(errors)
@@ -159,7 +206,7 @@ def time_variable(meta):
     return find_variable(meta, "vuosineljännes", "vuosi", "kuukausi")
 
 
-def pick_value(var, include, exclude=()):
+def pick_value(var, include, exclude=(), required=True):
     """Palauttaa (koodi, teksti) arvolle, jonka teksti täsmää hakusanoihin."""
     for code, text in zip(var["values"], var["valueTexts"]):
         t = text.lower()
@@ -167,6 +214,8 @@ def pick_value(var, include, exclude=()):
             x.lower() in t for x in exclude
         ):
             return code, text
+    if not required:
+        return None
     raise SystemExit(
         f"Arvoa ei löytynyt muuttujasta {var.get('code')} hakusanoilla {include}. "
         f"Saatavilla: {var['valueTexts']}"
@@ -234,9 +283,13 @@ def category_labels(ds, dim_id):
 # PxWeb-haut
 # ----------------------------------------------------------------------------
 
-def fetch_pxweb(url, meta, kausi, postal_codes, class_var, class_code,
+def fetch_pxweb(url, meta, kausi, postal_codes, class_var, class_codes,
                 value_code, count_code, label):
     """Hakee yhden taulukon yhdelle vuosineljännekselle.
+
+    class_codes: lista luokka-arvoja (esim. huoneluvut). Jos useita, arvo
+    lasketaan havaintomäärillä painotettuna keskiarvona (näin saadaan
+    "yhteensä", vaikka taulukossa ei olisi valmista yhteensä-luokkaa).
 
     Palauttaa: dict postinumero -> {"arvo": float|None, "n": int|None,
                                      "label": "00120 Punavuori (Helsinki)"}
@@ -252,7 +305,7 @@ def fetch_pxweb(url, meta, kausi, postal_codes, class_var, class_code,
             {"code": pvar["code"],
              "selection": {"filter": "item", "values": postal_codes}},
             {"code": class_var["code"],
-             "selection": {"filter": "item", "values": [class_code]}},
+             "selection": {"filter": "item", "values": list(class_codes)}},
             {"code": ivar["code"],
              "selection": {"filter": "item", "values": [value_code, count_code]}},
         ],
@@ -267,13 +320,30 @@ def fetch_pxweb(url, meta, kausi, postal_codes, class_var, class_code,
     for code in postal_codes:
         if not re.fullmatch(r"\d{5}", code):
             continue  # ohita mahdolliset koostealueet
-        coords = {tvar["code"]: kausi, pvar["code"]: code,
-                  class_var["code"]: class_code}
-        arvo = get(**coords, **{ivar["code"]: value_code})
-        n = get(**coords, **{ivar["code"]: count_code})
+        pairs = []
+        for cc in class_codes:
+            coords = {tvar["code"]: kausi, pvar["code"]: code,
+                      class_var["code"]: cc}
+            arvo = get(**coords, **{ivar["code"]: value_code})
+            n = get(**coords, **{ivar["code"]: count_code})
+            if arvo is not None:
+                pairs.append((float(arvo), int(n) if n is not None else None))
+        if not pairs:
+            arvo_out, n_out = None, None
+        elif len(pairs) == 1:
+            arvo_out, n_out = pairs[0]
+        else:
+            weights = [n for _, n in pairs if n]
+            if len(weights) == len(pairs) and sum(weights) > 0:
+                tot = sum(weights)
+                arvo_out = sum(a * n for a, n in pairs) / tot
+                n_out = tot
+            else:  # painoja ei saatavilla kaikille -> tavallinen keskiarvo
+                arvo_out = sum(a for a, _ in pairs) / len(pairs)
+                n_out = sum(n for _, n in pairs if n) or None
         out[code] = {
-            "arvo": float(arvo) if arvo is not None else None,
-            "n": int(n) if n is not None else None,
+            "arvo": arvo_out,
+            "n": n_out,
             "label": labels.get(code, code),
         }
     n_ok = sum(1 for v in out.values() if v["arvo"] is not None)
@@ -398,8 +468,10 @@ def main():
     args = ap.parse_args()
 
     # --- Metatiedot ja arvokoodit ------------------------------------------
-    price_url, price_meta = resolve_table(PRICE_TABLE_CANDIDATES, "hinnat")
-    rent_url, rent_meta = resolve_table(RENT_TABLE_CANDIDATES, "vuokrat")
+    price_url, price_meta = resolve_table(
+        PRICE_TABLE_CANDIDATES, "hinnat", needles=["13mt", "postinumero"])
+    rent_url, rent_meta = resolve_table(
+        RENT_TABLE_CANDIDATES, "vuokrat", needles=["13eb", "postinumero"])
 
     talotyyppi_var = find_variable(price_meta, "talotyyppi")
     talotyyppi_code, talotyyppi_text = pick_value(
@@ -410,8 +482,17 @@ def main():
     price_count_code, _ = pick_value(p_tiedot, ["lukumäärä"])
 
     huoneluku_var = find_variable(rent_meta, "huoneluku", "huoneistotyyppi")
-    huoneluku_code, huoneluku_text = pick_value(
-        huoneluku_var, HUONELUKU_HAKUSANAT[args.huoneluku])
+    picked = pick_value(huoneluku_var, HUONELUKU_HAKUSANAT[args.huoneluku],
+                        required=(args.huoneluku != "yhteensa"))
+    if picked is not None:
+        huoneluku_codes = [picked[0]]
+        huoneluku_text = picked[1]
+    else:
+        # Taulukossa ei ole yhteensä-luokkaa -> haetaan kaikki huoneluvut ja
+        # lasketaan havaintomäärillä painotettu keskiarvo postinumeroittain.
+        huoneluku_codes = list(huoneluku_var["values"])
+        huoneluku_text = ("painotettu keskiarvo: "
+                          + ", ".join(huoneluku_var["valueTexts"]))
     r_tiedot = find_variable(rent_meta, "tiedot")
     rent_value_code, rent_value_text = pick_value(
         r_tiedot, ["vuokra"], exclude=["lukumäärä", "muutos", "indeksi"])
@@ -442,11 +523,11 @@ def main():
         code = args.test
         prices = fetch_pxweb(price_url, price_meta, kausi,
                              [code] if code in price_codes else price_codes[:1],
-                             talotyyppi_var, talotyyppi_code,
+                             talotyyppi_var, [talotyyppi_code],
                              price_value_code, price_count_code, "hinnat")
         rents = fetch_pxweb(rent_url, rent_meta, kausi,
                             [code] if code in rent_codes else rent_codes[:1],
-                            huoneluku_var, huoneluku_code,
+                            huoneluku_var, huoneluku_codes,
                             rent_value_code, rent_count_code, "vuokrat")
         p = prices.get(code, {"arvo": None, "n": None, "label": code})
         r = rents.get(code, {"arvo": None, "n": None, "label": code})
@@ -460,10 +541,10 @@ def main():
 
     # --- Vaihe 2: koko maan hinnat ja vuokrat ------------------------------
     prices = fetch_pxweb(price_url, price_meta, kausi, price_codes,
-                         talotyyppi_var, talotyyppi_code,
+                         talotyyppi_var, [talotyyppi_code],
                          price_value_code, price_count_code, "hinnat")
     rents = fetch_pxweb(rent_url, rent_meta, kausi, rent_codes,
-                        huoneluku_var, huoneluku_code,
+                        huoneluku_var, huoneluku_codes,
                         rent_value_code, rent_count_code, "vuokrat")
 
     if args.intermediate:
