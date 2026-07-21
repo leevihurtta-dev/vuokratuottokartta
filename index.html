@@ -4,7 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Vuokratuottokartta — vanhojen osakeasuntojen bruttovuokratuotto postinumeroittain</title>
-<meta name="description" content="Vanhojen osakeasuntojen brutto- ja nettovuokratuotto postinumeroalueittain koko Suomessa. Data: Tilastokeskus (CC BY 4.0).">
+<meta name="description" content="Vuokratuotto koko Suomesta postinumeroittain kartalla. Vanhojen osakeasuntojen brutto- ja nettovuokratuotto, neliöhinnat ja vuokrat postinumeroalueittain. Data: Tilastokeskus (CC BY 4.0).">
+<link rel="canonical" href="https://vuokratuottokartta.fi/">
+<meta property="og:title" content="Vuokratuottokartta — vuokratuotto koko Suomesta postinumeroittain">
+<meta property="og:description" content="Selaa asuntojen brutto- ja nettovuokratuottoa postinumeroalueittain kartalla. Virallista Tilastokeskuksen dataa, ilmainen.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://vuokratuottokartta.fi/">
+<meta property="og:locale" content="fi_FI">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"Vuokratuottokartta","url":"https://vuokratuottokartta.fi/","applicationCategory":"FinanceApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Interaktiivinen kartta, joka näyttää vanhojen osakeasuntojen vuokratuoton postinumeroalueittain koko Suomessa. Data: Tilastokeskus.","inLanguage":"fi","isAccessibleForFree":true}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -113,6 +123,44 @@
   <p id="legend-title">Bruttovuokratuotto</p>
   <ul id="legend-items"></ul>
 </div>
+
+<!-- Näkyvä, avattava sisältöosio: kuvailee palvelun ja vastaa yleisimpiin
+     kysymyksiin. Tämä on aidosti käyttäjälle luettavaa sisältöä (ei piiloteksti)
+     ja auttaa myös hakukoneita ymmärtämään sivun aiheen. -->
+<details id="about">
+  <summary>Tietoa vuokratuotoista</summary>
+  <div class="about-body">
+    <h2>Vuokratuotto koko Suomesta postinumeroittain</h2>
+    <p>Vuokratuottokartta näyttää vanhojen osakeasuntojen brutto- ja
+    nettovuokratuoton postinumeroalueittain koko Suomessa. Kartalta näet yhdellä
+    silmäyksellä, millä alueilla asuntosijoittamisen laskennallinen vuokratuotto
+    on korkein ja millä matalin. Klikkaamalla aluetta saat esiin neliöhinnan,
+    keskineliövuokran, lasketun brutto- ja nettotuoton sekä taustatiedot kuten
+    väkiluvun ja alueen mediaanitulon. Kaikki luvut perustuvat Tilastokeskuksen
+    viralliseen avoimeen dataan — toteutuneisiin kauppoihin, ei pyyntihintoihin.</p>
+
+    <h2>Mikä on hyvä vuokratuotto?</h2>
+    <p>Vuokratuotto vaihtelee alueittain merkittävästi. Kasvukeskusten
+    keskustoissa bruttovuokratuotto on tyypillisesti noin 3–5 %, kun taas
+    pienemmillä paikkakunnilla ja kaupunkien reuna-alueilla luvut ovat usein
+    korkeampia, koska asuntojen hinnat ovat matalampia suhteessa vuokriin.
+    Korkea tuotto ei kuitenkaan yksin kerro hyvästä sijoituksesta: myös
+    vuokrausaste, arvonkehitys, alueen väestökehitys ja riskit vaikuttavat.
+    Kartta auttaa nimenomaan alueiden vertailussa keskenään.</p>
+
+    <h2>Miten vuokratuotto lasketaan?</h2>
+    <p>Bruttovuokratuotto lasketaan jakamalla vuotuinen vuokra asunnon
+    velattomalla hinnalla: keskineliövuokra × 12 ÷ neliöhinta × 100.
+    Nettovuokratuotossa huomioidaan lisäksi hoitovastike, arvioitu vajaakäyttö
+    ja varainsiirtovero. Tällä sivulla nettotuoton oletukset voi säätää itse.
+    Koska sekä hinta että vuokra ovat neliöperusteisia, laskenta ei vaadi
+    oletusta asunnon koosta.</p>
+
+    <p class="about-links">Selaa alueita listana:
+    <a href="/alueet/">kaikki kunnat ja postinumeroalueet</a>.
+    Data: Tilastokeskus, StatFin &amp; Paavo (CC&nbsp;BY&nbsp;4.0).</p>
+  </div>
+</details>
 
 <dialog id="info">
   <h2>Miten luvut lasketaan</h2>
