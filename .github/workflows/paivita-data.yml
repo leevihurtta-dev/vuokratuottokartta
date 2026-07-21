@@ -1,0 +1,37 @@
+name: Paivita vuokratuottodata
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 2 * *"
+
+permissions:
+  contents: write
+
+jobs:
+  paivita:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Asenna shapely
+        run: pip install shapely
+
+      - name: Aja datahaku Tilastokeskuksesta
+        run: python fetch_data.py
+
+      - name: Tallenna paivittynyt data
+        run: |
+          git config user.name "data-robotti"
+          git config user.email "actions@users.noreply.github.com"
+          git add postal_yields.geojson
+          if git diff --cached --quiet; then
+            echo "Ei muutoksia."
+          else
+            git commit -m "Paivita vuokratuottodata"
+            git push
+          fi
