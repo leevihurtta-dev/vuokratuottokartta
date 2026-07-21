@@ -42,11 +42,15 @@ USER_AGENT = "vuokratuottokartta/1.0 (avoin data; PxWeb + Paavo WFS)"
 # PxWeb-API:n polkurakenne on vaihdellut vuosien varrella, joten kokeillaan
 # useampaa kandidaattia ja käytetään ensimmäistä, joka palauttaa metatiedot.
 PRICE_TABLE_CANDIDATES = [
+    # Kansio + lyhyt tunniste — verifioitu toimivaksi pxdata.stat.fi:ssä 7/2026:
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mt.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mt.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/statfin_ashi_pxt_13mt.px",
     "https://statfin.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mt.px",
 ]
 RENT_TABLE_CANDIDATES = [
+    # Kansio + lyhyt tunniste — verifioitu toimivaksi pxdata.stat.fi:ssä 7/2026:
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/13eb.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13eb.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/statfin_asvu_pxt_13eb.px",
     "https://statfin.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13eb.px",
