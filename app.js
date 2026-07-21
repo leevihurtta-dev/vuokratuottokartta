@@ -379,13 +379,24 @@ function initMap(data) {
   map.on("load", () => {
     map.addSource("postal", { type: "geojson", data, generateId: true });
 
+    // Etsi pohjakartan ensimmäinen tekstitaso (paikannimet), jotta väri- ja
+    // rajakerrokset voidaan lisätä sen ALLE. Näin kaupunkien ja alueiden
+    // nimet jäävät näkyviin värialueiden päälle (käyttäjäpalaute).
+    let firstLabelId;
+    for (const lyr of map.getStyle().layers) {
+      if (lyr.type === "symbol" && lyr.layout && lyr.layout["text-field"]) {
+        firstLabelId = lyr.id;
+        break;
+      }
+    }
+
     // Pohjakerros: kaikki alueet harmaana ("ei dataa" / suodatettu jää näkyviin)
     map.addLayer({
       id: "postal-base",
       type: "fill",
       source: "postal",
       paint: { "fill-color": NODATA_COLOR, "fill-opacity": 0.5 },
-    });
+    }, firstLabelId);
     // Värikerros: vain alueet, joilla on data ja jotka läpäisevät suodattimet
     map.addLayer({
       id: "postal-fill",
@@ -398,7 +409,7 @@ function initMap(data) {
           "case", ["boolean", ["feature-state", "hover"], false], 0.92, 0.72,
         ],
       },
-    });
+    }, firstLabelId);
     map.addLayer({
       id: "postal-line",
       type: "line",
@@ -409,7 +420,7 @@ function initMap(data) {
           "case", ["boolean", ["feature-state", "hover"], false], 2, 0.6,
         ],
       },
-    });
+    }, firstLabelId);
 
     // Klikkaus -> popup (myös harmaat alueet, jotta "ei dataa" on tutkittavissa).
     // Saman alueen klikkaus uudelleen sulkee popupin (ruksin lisäksi).
