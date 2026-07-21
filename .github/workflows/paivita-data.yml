@@ -1,0 +1,39 @@
+name: Päivitä vuokratuottodata
+
+on:
+  workflow_dispatch:        # manuaalinen käynnistys napista (Actions-välilehti)
+  schedule:
+    - cron: "17 5 2 * *"    # automaattisesti joka kuun 2. päivä klo 05:17 UTC
+
+permissions:
+  contents: write
+
+jobs:
+  paivita:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hae repositorion sisältö
+        uses: actions/checkout@v4
+
+      - name: Asenna Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Asenna shapely (geometrian yksinkertaistus)
+        run: pip install shapely
+
+      - name: Aja datahaku Tilastokeskuksesta
+        run: python fetch_data.py
+
+      - name: Tallenna päivittynyt data repositorioon
+        run: |
+          git config user.name "data-robotti"
+          git config user.email "actions@users.noreply.github.com"
+          git add postal_yields.geojson
+          if git diff --cached --quiet; then
+            echo "Ei muutoksia dataan."
+          else
+            git commit -m "Päivitä vuokratuottodata (automaattinen ajo)"
+            git push
+          fi
