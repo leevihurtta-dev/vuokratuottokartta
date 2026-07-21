@@ -14,7 +14,7 @@ const FINLAND_BOUNDS = [[19.0, 59.6], [31.7, 70.1]];
 const BREAKS = [3, 4, 5, 6]; // luokkarajat: <3, 3–4, 4–5, 5–6, >6 %
 const COLORS = ["#c65f5f", "#e39b55", "#ecd06f", "#8fbf70", "#3f8f5f"];
 const NODATA_COLOR = "#d3d3cf";
-const SCALE_MAX = 8; // popupin asteikkopalkin yläraja (%)
+const SCALE_MAX = 15; // popupin asteikkopalkin yläraja (%)
 
 // ---------------------------------------------------------------------------
 // Tila
