@@ -46,10 +46,18 @@ PRICE_TABLE_CANDIDATES = [
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mt.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mt.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/statfin_ashi_pxt_13mt.px",
+    # Varalle: arkistokanta, jos taulukko joskus arkistoidaan:
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/ashi/13mt.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/ashi/statfin_ashi_pxt_13mt.px",
     "https://statfin.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mt.px",
 ]
 RENT_TABLE_CANDIDATES = [
-    # Kansio + lyhyt tunniste — verifioitu toimivaksi pxdata.stat.fi:ssä 7/2026:
+    # HUOM: Tilastokeskus uudisti vuokratilaston 28.4.2026 ja arkistoi
+    # postinumerotason taulukon 13eb (viimeinen tieto 2025Q4). Arkistokannan
+    # (StatFin_Passiivi) taulukoita voi käyttää rajapinnasta samalla tavalla.
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/asvu/13eb.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/asvu/statfin_asvu_pxt_13eb.px",
+    # Aktiivinen kanta varalle (jos postinumerotaulukko joskus palaa):
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/13eb.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13eb.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/statfin_asvu_pxt_13eb.px",
@@ -159,7 +167,7 @@ def resolve_table(candidates, label, needles=()):
         matches = [e for e in tables
                    if any(n.lower() in (str(e.get("id", "")) + " "
                                         + str(e.get("text", ""))).lower()
-                          for n in needles)] or tables
+                          for n in needles)]
         for entry in matches:
             tid = str(entry.get("id", ""))
             if not tid:
@@ -207,13 +215,22 @@ def time_variable(meta):
 
 
 def pick_value(var, include, exclude=(), required=True):
-    """Palauttaa (koodi, teksti) arvolle, jonka teksti täsmää hakusanoihin."""
-    for code, text in zip(var["values"], var["valueTexts"]):
-        t = text.lower()
-        if any(n.lower() in t for n in include) and not any(
-            x.lower() in t for x in exclude
-        ):
-            return code, text
+    """Palauttaa (koodi, teksti) arvolle, jonka teksti täsmää hakusanoihin.
+
+    Osumat etsitään tiukimmasta löyhimpään (täsmälleen sama -> alkaa sanalla
+    -> sisältää sanan) ja hakusanalistan järjestyksessä, jotta esim.
+    'Talotyypit yhteensä' voittaa arvon 'Rivitalot yhteensä'."""
+    pairs = [(c, t) for c, t in zip(var["values"], var["valueTexts"])
+             if not any(x.lower() in t.lower() for x in exclude)]
+    for mode in ("exact", "prefix", "contains"):
+        for needle in include:
+            n = needle.lower()
+            for code, text in pairs:
+                t = text.lower().strip()
+                if ((mode == "exact" and t == n)
+                        or (mode == "prefix" and t.startswith(n))
+                        or (mode == "contains" and n in t)):
+                    return code, text
     if not required:
         return None
     raise SystemExit(
@@ -223,15 +240,15 @@ def pick_value(var, include, exclude=(), required=True):
 
 
 TALOTYYPPI_HAKUSANAT = {
-    "yhteensa": ["yhteensä"],
-    "kerrostalot": ["kerrostalo"],
-    "rivitalot": ["rivitalo"],
+    "yhteensa": ["talotyypit yhteensä", "kaikki talotyypit", "yhteensä"],
+    "kerrostalot": ["kerrostalot yhteensä", "kerrostalo yhteensä", "kerrostalo"],
+    "rivitalot": ["rivitalot yhteensä", "rivitalo yhteensä", "rivitalo"],
 }
 HUONELUKU_HAKUSANAT = {
-    "yhteensa": ["yhteensä"],
+    "yhteensa": ["huoneluvut yhteensä", "kaikki huoneluvut", "yhteensä"],
     "yksiot": ["yksiö"],
     "kaksiot": ["kaksio"],
-    "kolmiot": ["kolme", "3h"],
+    "kolmiot": ["kolme", "kolmio", "3h"],
 }
 
 
@@ -603,6 +620,8 @@ def main():
             "demo": False,
             "lahde": "Tilastokeskus, StatFin (ashi 13mt, asvu 13eb) ja "
                      "Paavo-postinumeroalueet. Lisenssi CC BY 4.0.",
+            "hintataulukko": price_url,
+            "vuokrataulukko": rent_url,
             "oletukset": {
                 "hoitovastike_eur_m2_kk": DEFAULT_HOITOVASTIKE,
                 "vajaakayttoaste": DEFAULT_VAJAAKAYTTO,
