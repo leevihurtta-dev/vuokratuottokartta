@@ -390,7 +390,12 @@ def jsonstat_reader(ds):
     def get(**coords):
         i = 0
         for d, dim_id in enumerate(ids):
-            pos = positions[dim_id].get(coords[dim_id])
+            if dim_id in coords:
+                pos = positions[dim_id].get(coords[dim_id])
+            elif sizes[d] == 1:
+                pos = 0  # dimensio, jota ei annettu; vain yksi arvo -> se
+            else:
+                return None
             if pos is None:
                 return None
             i += pos * strides[d]
@@ -447,6 +452,29 @@ def fetch_pxweb(url, meta, kaudet, area_codes, class_var, class_codes,
     query_items.append(
         {"code": ivar["code"],
          "selection": {"filter": "item", "values": tiedot_values}})
+
+    # Taulukossa voi olla muuttujia, joita tämä skripti ei tunne (esim.
+    # uudistetun vuokratilaston Rahoitusmuoto). Ne rajataan yhteen arvoon,
+    # jotta vastauksen dimensiot pysyvät hallinnassa: suositaan
+    # vapaarahoitteista tai yhteensä-luokkaa, muuten ensimmäistä arvoa.
+    known = {tvar["code"], pvar["code"], ivar["code"]}
+    if class_var is not None:
+        known.add(class_var["code"])
+    extra_coords = {}
+    for var in meta.get("variables", []):
+        vcode = var.get("code")
+        if not vcode or vcode in known:
+            continue
+        pick = pick_value(var, ["vapaarahoit", "yhteensä", "kaikki",
+                                "koko maa"], required=False)
+        val_code, val_text = (pick if pick
+                              else (var["values"][0], var["valueTexts"][0]))
+        print(f"[{label}] Lisämuuttuja {vcode!r}: käytetään arvoa {val_text!r}")
+        query_items.append({"code": vcode,
+                            "selection": {"filter": "item",
+                                          "values": [val_code]}})
+        extra_coords[vcode] = val_code
+
     query = {"query": query_items, "response": {"format": "json-stat2"}}
 
     print(f"[{label}] Haetaan {len(area_codes)} aluetta, "
@@ -463,6 +491,7 @@ def fetch_pxweb(url, meta, kaudet, area_codes, class_var, class_codes,
         for kk in kaudet:
             for cc in (class_codes if class_var is not None else [None]):
                 coords = {tvar["code"]: kk, pvar["code"]: code}
+                coords.update(extra_coords)
                 if class_var is not None:
                     coords[class_var["code"]] = cc
                 arvo = get(**coords, **{ivar["code"]: value_code})
@@ -601,9 +630,11 @@ def fetch_muni_fallback(kind, kausi, class_choice):
                        value_code, count_code, label,
                        area_needles=("kunta", "alue"), code_pattern=r".+")
     out = {}
+    n_alueita = 0
     for c, v in data.items():
         if v["arvo"] is None:
             continue
+        n_alueita += 1
         out[normalize_kunta(c)] = v
         name = str(v.get("label") or "").strip().lower()
         if name:
@@ -611,7 +642,7 @@ def fetch_muni_fallback(kind, kausi, class_choice):
     if not out:
         raise RuntimeError(f"kuntatason taulukko {url} ei palauttanut arvoja "
                            f"kausille {periods}")
-    return out, {"taulukko": url, "kaudet": periods}
+    return out, {"taulukko": url, "kaudet": periods, "alueita": n_alueita}
 
 
 # ----------------------------------------------------------------------------
@@ -852,9 +883,9 @@ def main():
                 muni_prices = data
             else:
                 muni_rents = data
-        if muni_prices or muni_rents:
-            print(f"[kuntataso] Varadata: hinnat {len(muni_prices)} kunnalle, "
-                  f"vuokrat {len(muni_rents)} kunnalle.")
+        if muni_info:
+            print("[kuntataso] Varadata: " + "; ".join(
+                f"{k} {v['alueita']} alueelle" for k, v in muni_info.items()))
 
     if args.intermediate:
         with open("prices_rents.json", "w", encoding="utf-8") as f:
