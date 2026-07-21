@@ -11,6 +11,12 @@ Hakee Tilastokeskuksen avoimesta datasta (CC BY 4.0):
 Yhdistää postinumerolla, laskee brutto- ja nettovuokratuoton ja kirjoittaa
 staattisen postal_yields.geojson-tiedoston frontendille.
 
+Kattavuus: postinumerotason hinta/vuokra on usein peitetty (esim. alle 20
+vuokrahavaintoa), joten peitetyt arvot täydennetään oletuksena saman kunnan
+keskiarvolla kuntatason taulukoista. Täydennetyt arvot merkitään
+ominaisuuksiin (hinta_taso/vuokra_taso/taso = 'kunta') ja frontend näyttää
+niistä huomautuksen. Poista käytöstä: --no-fallback.
+
 Käyttö (rakennusjärjestyksen mukaisesti):
   python fetch_data.py --test 00120        # Vaihe 1: yhden postinumeron arvot
   python fetch_data.py --intermediate      # Vaihe 2: tallenna välitiedosto
@@ -62,6 +68,24 @@ RENT_TABLE_CANDIDATES = [
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13eb.px",
     "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/statfin_asvu_pxt_13eb.px",
     "https://statfin.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13eb.px",
+]
+
+# Kuntatason varataulukot: kun postinumerotason hinta tai vuokra on peitetty
+# (esim. alle 20 vuokrahavaintoa), täydennetään saman kunnan keskiarvolla,
+# jotta tärkeimmät alueet eivät jää harmaiksi. Tarkkoja taulukkotunnisteita
+# ei kovakoodata sokeasti: jos suorat osoitteet eivät toimi, resolve_table
+# etsii kansiolistauksesta taulukon, jonka nimessä on 'kunnittain'.
+PRICE_MUNI_TABLE_CANDIDATES = [
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mu.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mu.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/112p.px",
+]
+RENT_MUNI_TABLE_CANDIDATES = [
+    # Uudistettu vuokratilasto (28.4.2026 alkaen) julkaisee kuntatason
+    # aktiivisessa kannassa; arkistokanta varalle.
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/13ea.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/asvu/statfin_asvu_pxt_13ea.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin_Passiivi/asvu/13ea.px",
 ]
 
 # pno_tilasto = rantaviivalla leikatut alueet + Paavo-tilastot valmiiksi mukana.
@@ -300,49 +324,60 @@ def category_labels(ds, dim_id):
 # PxWeb-haut
 # ----------------------------------------------------------------------------
 
-def fetch_pxweb(url, meta, kausi, postal_codes, class_var, class_codes,
-                value_code, count_code, label):
+def fetch_pxweb(url, meta, kausi, area_codes, class_var, class_codes,
+                value_code, count_code, label,
+                area_needles=("postinumero",), code_pattern=r"\d{5}"):
     """Hakee yhden taulukon yhdelle vuosineljännekselle.
 
     class_codes: lista luokka-arvoja (esim. huoneluvut). Jos useita, arvo
     lasketaan havaintomäärillä painotettuna keskiarvona (näin saadaan
     "yhteensä", vaikka taulukossa ei olisi valmista yhteensä-luokkaa).
 
-    Palauttaa: dict postinumero -> {"arvo": float|None, "n": int|None,
-                                     "label": "00120 Punavuori (Helsinki)"}
+    area_needles/code_pattern: aluemuuttujan tunnistus — oletuksena
+    postinumero (5 numeroa), kuntatason varataulukoille ("kunta", "alue")
+    ja koodit KUxxx tai xxx. count_code voi olla None, jos taulukossa ei
+    ole havaintomäärää.
+
+    Palauttaa: dict aluekoodi -> {"arvo": float|None, "n": int|None,
+                                   "label": "00120 Punavuori (Helsinki)"}
     """
     tvar = time_variable(meta)
-    pvar = find_variable(meta, "postinumero")
+    pvar = find_variable(meta, *area_needles)
     ivar = find_variable(meta, "tiedot")
+
+    tiedot_values = [value_code]
+    if count_code and count_code != value_code:
+        tiedot_values.append(count_code)
 
     query = {
         "query": [
             {"code": tvar["code"],
              "selection": {"filter": "item", "values": [kausi]}},
             {"code": pvar["code"],
-             "selection": {"filter": "item", "values": postal_codes}},
+             "selection": {"filter": "item", "values": area_codes}},
             {"code": class_var["code"],
              "selection": {"filter": "item", "values": list(class_codes)}},
             {"code": ivar["code"],
-             "selection": {"filter": "item", "values": [value_code, count_code]}},
+             "selection": {"filter": "item", "values": tiedot_values}},
         ],
         "response": {"format": "json-stat2"},
     }
-    print(f"[{label}] Haetaan {len(postal_codes)} postinumeroa, kausi {kausi}…")
+    print(f"[{label}] Haetaan {len(area_codes)} aluetta, kausi {kausi}…")
     ds = post_json(url, query)
     get = jsonstat_reader(ds)
     labels = category_labels(ds, pvar["code"])
 
     out = {}
-    for code in postal_codes:
-        if not re.fullmatch(r"\d{5}", code):
+    for code in area_codes:
+        if not re.fullmatch(code_pattern, code):
             continue  # ohita mahdolliset koostealueet
         pairs = []
         for cc in class_codes:
             coords = {tvar["code"]: kausi, pvar["code"]: code,
                       class_var["code"]: cc}
             arvo = get(**coords, **{ivar["code"]: value_code})
-            n = get(**coords, **{ivar["code"]: count_code})
+            n = (get(**coords, **{ivar["code"]: count_code})
+                 if len(tiedot_values) > 1 else None)
             if arvo is not None:
                 pairs.append((float(arvo), int(n) if n is not None else None))
         if not pairs:
@@ -379,6 +414,91 @@ def kunta_from_label(label):
 def nimi_from_label(label):
     m = re.match(r"^\d{5}\s+(.*?)\s*(?:\([^()]*\))?\s*$", label or "")
     return m.group(1) if m else None
+
+
+# ----------------------------------------------------------------------------
+# Kuntatason varadata (täydentää peitetyt postinumerotason arvot)
+# ----------------------------------------------------------------------------
+
+def normalize_kunta(code):
+    """'KU091' | '091' | 91 -> '091'. PxWebin kuntakoodissa on usein
+    KU-etuliite, Paavon pno_tilasto-tasossa pelkkä 3-numeroinen koodi."""
+    s = str(code or "").strip()
+    if s[:2].upper() == "KU":
+        s = s[2:]
+    return s.zfill(3) if s.isdigit() else s
+
+
+def with_fallback(primary, fallback):
+    """Yhdistää postinumerotason arvon ja kuntatason varan.
+
+    primary/fallback: {"arvo": float|None, "n": int|None} tai None.
+    Palauttaa (arvo, n, taso), missä taso on 'pno', 'kunta' tai None."""
+    p = primary or {}
+    if p.get("arvo") is not None:
+        return p["arvo"], p.get("n"), "pno"
+    f = fallback or {}
+    if f.get("arvo") is not None:
+        return f["arvo"], f.get("n"), "kunta"
+    return None, None, None
+
+
+def fetch_muni_fallback(kind, kausi, class_choice):
+    """Hakee kuntatason hinnat tai vuokrat peitettyjen alueiden täydentämiseksi.
+
+    kind: 'hinnat' | 'vuokrat'. Palauttaa (data, info), missä data on
+    dict kuntakoodi ('091') -> {"arvo", "n", "label"} ja info kuvaa käytetyn
+    taulukon ja kauden. Nostaa poikkeuksen, jos dataa ei saada — kutsuja
+    saa jatkaa ilman varadataa."""
+    if kind == "hinnat":
+        candidates = PRICE_MUNI_TABLE_CANDIDATES
+        class_needles = ("talotyyppi",)
+        hakusanat = TALOTYYPPI_HAKUSANAT[class_choice]
+        include, exclude = ["neliöhinta"], ["lukumäärä", "muutos", "indeksi"]
+    else:
+        candidates = RENT_MUNI_TABLE_CANDIDATES
+        class_needles = ("huoneluku", "huoneistotyyppi")
+        hakusanat = HUONELUKU_HAKUSANAT[class_choice]
+        include, exclude = ["vuokra"], ["lukumäärä", "muutos", "indeksi"]
+
+    label = f"{kind}/kunta"
+    url, meta = resolve_table(candidates, label, needles=["kunnittain"])
+
+    tvar = time_variable(meta)
+    quarters = [v for v in tvar["values"] if re.fullmatch(r"\d{4}Q\d", v)]
+    if not quarters:
+        raise RuntimeError(
+            f"taulukossa {url} ei ole vuosineljännestasoa "
+            f"(aikamuuttujan viimeiset arvot: {tvar['values'][-3:]})")
+    muni_kausi = kausi if kausi in quarters else quarters[-1]
+    if muni_kausi != kausi:
+        print(f"[{label}] Kautta {kausi} ei ole taulukossa — "
+              f"käytetään lähintä saatavilla olevaa: {muni_kausi}.")
+
+    avar = find_variable(meta, "kunta", "alue")
+    codes = [c for c in avar["values"] if re.fullmatch(r"KU\d{3}|\d{3}", c)]
+    if not codes:  # tuntematon koodimuoto -> otetaan kaikki paitsi koko maa
+        codes = [c for c in avar["values"] if c.upper() != "SSS"]
+
+    cvar = find_variable(meta, *class_needles)
+    picked = pick_value(cvar, hakusanat, required=False)
+    class_codes = [picked[0]] if picked else list(cvar["values"])
+
+    ivar = find_variable(meta, "tiedot")
+    value_code, _ = pick_value(ivar, include, exclude=exclude)
+    cnt = pick_value(ivar, ["lukumäärä"], required=False)
+    count_code = cnt[0] if cnt else None
+
+    data = fetch_pxweb(url, meta, muni_kausi, codes, cvar, class_codes,
+                       value_code, count_code, label,
+                       area_needles=("kunta", "alue"),
+                       code_pattern=r"KU\d{3}|\d{3}")
+    out = {normalize_kunta(c): v for c, v in data.items()
+           if v["arvo"] is not None}
+    if not out:
+        raise RuntimeError(f"kuntatason taulukko {url} ei palauttanut arvoja "
+                           f"kaudelle {muni_kausi}")
+    return out, {"taulukko": url, "kausi": muni_kausi}
 
 
 # ----------------------------------------------------------------------------
@@ -481,6 +601,9 @@ def main():
                          "(oletus 0.0005 ≈ 40 m; 0 = ei yksinkertaistusta).")
     ap.add_argument("--intermediate", action="store_true",
                     help="Tallenna välitiedosto prices_rents.json (vaihe 2).")
+    ap.add_argument("--no-fallback", action="store_true",
+                    help="Älä täydennä peitettyjä postinumeroalueita "
+                         "kuntatason keskiarvoilla (oletuksena täydennetään).")
     ap.add_argument("--out", default="postal_yields.geojson")
     args = ap.parse_args()
 
@@ -564,9 +687,31 @@ def main():
                         huoneluku_var, huoneluku_codes,
                         rent_value_code, rent_count_code, "vuokrat")
 
+    # --- Vaihe 2b: kuntatason varadata peitetyille alueille -----------------
+    muni_prices, muni_rents, muni_info = {}, {}, {}
+    if not args.no_fallback:
+        for kind, choice in (("hinnat", args.talotyyppi),
+                             ("vuokrat", args.huoneluku)):
+            try:
+                data, info = fetch_muni_fallback(kind, kausi, choice)
+            except (Exception, SystemExit) as e:  # noqa: BLE001 — varadata on
+                # valinnaista: epäonnistuminen ei saa kaataa koko ajoa.
+                print(f"VAROITUS: kuntatason {kind} eivät saatavilla ({e}). "
+                      f"Peitetyt alueet jäävät tältä osin ilman dataa.")
+                continue
+            muni_info[kind] = info
+            if kind == "hinnat":
+                muni_prices = data
+            else:
+                muni_rents = data
+        if muni_prices or muni_rents:
+            print(f"[kuntataso] Varadata: hinnat {len(muni_prices)} kunnalle, "
+                  f"vuokrat {len(muni_rents)} kunnalle.")
+
     if args.intermediate:
         with open("prices_rents.json", "w", encoding="utf-8") as f:
-            json.dump({"kausi": kausi, "hinnat": prices, "vuokrat": rents},
+            json.dump({"kausi": kausi, "hinnat": prices, "vuokrat": rents,
+                       "kunta_hinnat": muni_prices, "kunta_vuokrat": muni_rents},
                       f, ensure_ascii=False, indent=1)
         print("Välitiedosto kirjoitettu: prices_rents.json")
 
@@ -575,6 +720,7 @@ def main():
 
     out_features = []
     n_brutto = 0
+    n_fallback = 0
     for feat in feats:
         props = feat.get("properties", {})
         geom = feat.get("geometry")
@@ -584,13 +730,25 @@ def main():
 
         p = prices.get(code, {})
         r = rents.get(code, {})
-        hinta = p.get("arvo")
-        vuokra = r.get("arvo")
+        kcode = normalize_kunta(props.get("kunta"))
+        mp = muni_prices.get(kcode)
+        mr = muni_rents.get(kcode)
+        hinta, n_kaupat, hinta_taso = with_fallback(p, mp)
+        vuokra, n_vuokrat, vuokra_taso = with_fallback(r, mr)
         label = p.get("label") or r.get("label") or ""
 
         brutto = brutto_pct(hinta, vuokra)
+        taso = None
         if brutto is not None:
             n_brutto += 1
+            taso = ("pno" if hinta_taso == "pno" and vuokra_taso == "pno"
+                    else "kunta")
+            if taso == "kunta":
+                n_fallback += 1
+
+        kunta_nimi = (kunta_from_label(label)
+                      or ((mp or mr) or {}).get("label")
+                      or props.get("kunta"))
 
         out_features.append({
             "type": "Feature",
@@ -598,13 +756,17 @@ def main():
             "properties": {
                 "posti_alue": code,
                 "nimi": props.get("nimi") or nimi_from_label(label) or code,
-                "kunta": kunta_from_label(label) or props.get("kunta"),
+                "kunta": kunta_nimi,
                 "hinta_eur_m2": round(hinta, 0) if hinta is not None else None,
                 "vuokra_eur_m2": round(vuokra, 2) if vuokra is not None else None,
                 "brutto_pct": brutto,
                 "netto_pct": netto_pct(hinta, vuokra),
-                "n_kaupat": p.get("n"),
-                "n_vuokrat": r.get("n"),
+                "n_kaupat": n_kaupat,
+                "n_vuokrat": n_vuokrat,
+                # 'pno' = postinumerotason tieto, 'kunta' = kuntatason keskiarvo
+                "hinta_taso": hinta_taso,
+                "vuokra_taso": vuokra_taso,
+                "taso": taso,
                 "vakiluku": masked_stat(props.get("he_vakiy")),
                 "mediaanitulo": masked_stat(props.get("tr_mtu")),
             },
@@ -622,6 +784,8 @@ def main():
                      "Paavo-postinumeroalueet. Lisenssi CC BY 4.0.",
             "hintataulukko": price_url,
             "vuokrataulukko": rent_url,
+            "kuntataso_taydennys": bool(muni_info),
+            "kuntataso_taulukot": muni_info or None,
             "oletukset": {
                 "hoitovastike_eur_m2_kk": DEFAULT_HOITOVASTIKE,
                 "vajaakayttoaste": DEFAULT_VAJAAKAYTTO,
@@ -639,6 +803,9 @@ def main():
     print(f"\nValmis: {args.out}")
     print(f"  Alueita kartalla: {len(out_features)}")
     print(f"  Bruttotuotto laskettavissa: {n_brutto} alueella")
+    if n_fallback:
+        print(f"  …joista kuntatason keskiarvolla täydennettyjä: {n_fallback} "
+              f"(merkitty taso='kunta')")
     if bruttos:
         print(f"  Brutto min/mediaani/max: {bruttos[0]} / {med} / {bruttos[-1]} % "
               f"(järkevä haarukka kaupungeissa ~3–6 %)")

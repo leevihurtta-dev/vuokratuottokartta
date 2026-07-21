@@ -23,6 +23,8 @@ const state = {
   colorMode: "brutto",           // "brutto" | "netto"
   minBrutto: 0,
   minKaupat: 0,
+  allowKunta: true,              // salli kuntatason keskiarvolla täydennetyt
+
   hoito: 4.5,                    // €/m²/kk
   vaja: 5,                       // %
   vero: 1.5,                     // %
@@ -80,11 +82,16 @@ function colorExpression() {
 }
 
 function fillFilter() {
-  return ["all",
+  const f = ["all",
     ["==", ["typeof", ["get", "brutto_pct"]], "number"],
     [">=", ["get", "brutto_pct"], state.minBrutto],
     [">=", ["coalesce", ["get", "n_kaupat"], 0], state.minKaupat],
   ];
+  // Vanhoissa datatiedostoissa taso-kenttää ei ole -> coalesce "pno".
+  if (!state.allowKunta) {
+    f.push(["==", ["coalesce", ["get", "taso"], "pno"], "pno"]);
+  }
+  return f;
 }
 
 function updateLayers() {
@@ -144,9 +151,15 @@ function popupHTML(p) {
       </div>`;
   }
 
-  const smallSample =
+  // Kuntatason keskiarvolla täydennetyt arvot merkitään.
+  const lvl = (v, taso) =>
+    (v !== null && taso === "kunta") ? `${v}\u00a0(kunta)` : v;
+  const kuntaFallback =
+    p.hinta_taso === "kunta" || p.vuokra_taso === "kunta";
+
+  const smallSample = !kuntaFallback && (
     (typeof p.n_kaupat === "number" && p.n_kaupat < 10) ||
-    (typeof p.n_vuokrat === "number" && p.n_vuokrat < 30);
+    (typeof p.n_vuokrat === "number" && p.n_vuokrat < 30));
 
   return `
     <h3 class="pp-title"><span class="code">${p.posti_alue}</span> ${p.nimi ?? ""}</h3>
@@ -155,13 +168,14 @@ function popupHTML(p) {
     <dl class="pp-grid">
       ${row("Bruttotuotto", fmt(brutto, 2, " %"), "big")}
       ${row("Nettotuotto*", fmt(netto, 2, " %"), "big")}
-      ${row("Neliöhinta", fmt(p.hinta_eur_m2, 0, " €/m²"))}
-      ${row("Keskineliövuokra", fmt(p.vuokra_eur_m2, 2, " €/m²/kk"))}
-      ${row("Kauppoja", fmt(p.n_kaupat, 0))}
-      ${row("Vuokrahavaintoja", fmt(p.n_vuokrat, 0))}
+      ${row("Neliöhinta", lvl(fmt(p.hinta_eur_m2, 0, " €/m²"), p.hinta_taso))}
+      ${row("Keskineliövuokra", lvl(fmt(p.vuokra_eur_m2, 2, " €/m²/kk"), p.vuokra_taso))}
+      ${row("Kauppoja", lvl(fmt(p.n_kaupat, 0), p.hinta_taso))}
+      ${row("Vuokrahavaintoja", lvl(fmt(p.n_vuokrat, 0), p.vuokra_taso))}
       ${row("Väkiluku", fmt(p.vakiluku, 0))}
       ${row("Mediaanitulo", fmt(p.mediaanitulo, 0, " €/v"))}
     </dl>
+    ${kuntaFallback ? '<p class="pp-warn">Postinumerotason tieto on peitetty — "(kunta)"-merkityt luvut ovat koko kunnan keskiarvoja, jotka tasoittavat alueiden välisiä eroja.</p>' : ""}
     ${smallSample ? '<p class="pp-warn">Pieni otos — keskiarvot ovat epävarmoja.</p>' : ""}
     <p class="hint">* oletuksillasi (säädä paneelista)</p>`;
 }
@@ -277,6 +291,10 @@ function bindControls() {
   bindSlider("f-kaupat", (v) => {
     state.minKaupat = v;
     $("f-kaupat-out").textContent = nf(0).format(v);
+  });
+  $("f-kunta").addEventListener("change", (e) => {
+    state.allowKunta = e.target.checked;
+    updateLayers();
   });
 
   // Nettotuoton oletukset

@@ -69,7 +69,13 @@
       Kauppoja vähintään <output id="f-kaupat-out">0</output>
     </label>
     <input id="f-kaupat" type="range" min="0" max="50" step="1" value="0">
-    <p class="hint">Suodatetut ja tietosuojan vuoksi peitetyt alueet näkyvät harmaina.</p>
+    <label class="check-row">
+      <input id="f-kunta" type="checkbox" checked>
+      <span>Täydennä peitetyt alueet kuntatason keskiarvolla</span>
+    </label>
+    <p class="hint">Jos postinumerotason tieto on peitetty, käytetään saman
+    kunnan keskiarvoa (merkitty popupissa). Suodatetut ja kokonaan ilman
+    dataa jäävät alueet näkyvät harmaina.</p>
   </section>
 
   <section>
@@ -115,7 +121,7 @@
   <ul>
     <li>Hintadata on jaoteltu <em>talotyypin</em> (kerros-/rivitalo) ja vuokradata <em>huoneluvun</em> mukaan — täydellistä vastaavuutta ei ole. Kartta käyttää molempien "yhteensä"-tasoa; yksiöiden todellinen tuotto on tyypillisesti tätä korkeampi.</li>
     <li>Postinumeroalueen keskiarvot kätkevät suuren hajonnan. Työkalu on suuntaa-antava, ei kohdekohtainen arvio.</li>
-    <li>Vuokratieto on peitetty, jos havaintoja on alle 20 tai vuokrataloyhtiöiden osuus alueella on suuri — siksi moni pientalo- ja haja-asutusalue jää harmaaksi.</li>
+    <li>Vuokratieto on peitetty, jos havaintoja on alle 20 tai vuokrataloyhtiöiden osuus alueella on suuri. Peitetyt hinnat ja vuokrat täydennetään oletuksena <em>kuntatason</em> keskiarvolla (merkitty popupissa ja kytkettävissä pois suodattimista) — kuntakeskiarvo tasoittaa alueiden välisiä eroja, joten tulkitse näitä alueita varoen.</li>
     <li>Kauppojen ja vuokrahavaintojen lukumäärä popupissa kertoo luvun luotettavuudesta: pieni otos, epävarma keskiarvo.</li>
     <li>Netto ei sisällä mm. remontteja, rahoitusvastiketta, rahoituskuluja eikä arvonmuutosta.</li>
   </ul>
