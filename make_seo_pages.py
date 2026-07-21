@@ -9,6 +9,11 @@ Tuottaa:
   alueet/index.html               — kaikkien kuntien hakemisto + top-listat
   sitemap.xml, robots.txt         — hakukoneita varten
 
+Hakukoneoptimointi: jokaisella aluesivulla on ainutlaatuinen sanallinen
+yhteenveto datasta, JSON-LD-rakenteinen data (Dataset + BreadcrumbList),
+Open Graph -tiedot ja lähialueiden ristiinlinkitys — nämä parantavat
+indeksointia ja pitkän hännän hakunäkyvyyttä.
+
 Ajetaan GitHub Actions -workflow'ssa heti fetch_data.py:n perään, jolloin
 sivut päivittyvät automaattisesti aina datan mukana.
 
@@ -57,6 +62,76 @@ def esc(s):
     return html.escape(str(s if s is not None else ""))
 
 
+def prose_summary(p, kunta_areas, national_median):
+    """Rakentaa muutaman lauseen sanallisen yhteenvedon alueen luvuista.
+    Ainutlaatuinen teksti parantaa hakukonenäkyvyyttä ja auttaa lukijaa."""
+    nimi = p.get("nimi") or p["posti_alue"]
+    kunta = p.get("kunta") or ""
+    b = p.get("brutto_pct")
+    sentences = []
+
+    # 1) Suhde kunnan muihin alueisiin.
+    same = sorted((a["brutto_pct"] for a in kunta_areas
+                   if a.get("brutto_pct") is not None), reverse=True)
+    if b is not None and len(same) >= 3:
+        rank = same.index(b) + 1 if b in same else None
+        kmed = same[len(same) // 2]
+        if b >= kmed * 1.15:
+            taso = "selvästi kunnan keskitasoa korkeampi"
+        elif b <= kmed * 0.85:
+            taso = "kunnan keskitasoa matalampi"
+        else:
+            taso = "lähellä kunnan keskitasoa"
+        rankstr = (f" ja sijoittuu {rank}. korkeimmaksi kunnan "
+                   f"{len(same)} alueesta" if rank and rank <= 5 else "")
+        sentences.append(
+            f"Alueen {fnum(b, 2)} %:n bruttovuokratuotto on {taso}"
+            f"{rankstr}.")
+
+    # 2) Mikä ajaa tuottoa (hinta vs. vuokra).
+    h, v = p.get("hinta_eur_m2"), p.get("vuokra_eur_m2")
+    if h is not None and v is not None:
+        if h >= 5000:
+            sentences.append(
+                f"Korkea neliöhinta ({fnum(h)} €/m²) painaa tuottoa, "
+                f"vaikka {fnum(v, 2)} €/m²/kk:n keskivuokra on kysytyllä "
+                f"tasolla.")
+        elif h <= 2200:
+            sentences.append(
+                f"Matala neliöhinta ({fnum(h)} €/m²) nostaa laskennallista "
+                f"tuottoa; tällaisilla alueilla kannattaa kuitenkin arvioida "
+                f"arvonkehitys ja vuokrausaste erikseen.")
+        else:
+            sentences.append(
+                f"Neliöhinta on {fnum(h)} €/m² ja keskineliövuokra "
+                f"{fnum(v, 2)} €/m²/kk.")
+
+    # 3) Suhde koko maahan.
+    if b is not None and national_median is not None:
+        if b >= national_median + 1:
+            sentences.append(
+                "Koko maan mittakaavassa tuotto on keskimääräistä korkeampi.")
+        elif b <= national_median - 1:
+            sentences.append(
+                "Koko maan mittakaavassa tuotto on maltillinen, mikä on "
+                "tyypillistä kalliimmille kasvualueille.")
+
+    # 4) Luotettavuusvaroitus.
+    if p.get("taso") == "kunta":
+        sentences.append(
+            "Postinumerotason vuokratieto on tietosuojasyistä peitetty, joten "
+            "laskelmassa on käytetty kunnan keskiarvoa — tulkitse luku "
+            "suuntaa-antavana.")
+    elif ((isinstance(p.get("n_kaupat"), (int, float)) and p["n_kaupat"] < 10)
+          or (isinstance(p.get("n_vuokrat"), (int, float))
+              and p["n_vuokrat"] < 30)):
+        sentences.append(
+            "Havaintojen määrä alueella on pieni, joten keskiarvot ovat "
+            "tavallista epävarmempia.")
+
+    return " ".join(sentences)
+
+
 def slugify(name):
     s = str(name or "").strip().lower()
     s = (s.replace("ä", "a").replace("ö", "o").replace("å", "a")
@@ -72,7 +147,11 @@ def fnum(v, dec=0, unit=""):
     return s + ("\u00a0" + unit if unit else "")
 
 
-def page(title, description, canonical, body, breadcrumb=""):
+def page(title, description, canonical, body, breadcrumb="", jsonld=None):
+    ld = ""
+    if jsonld:
+        ld = ('<script type="application/ld+json">'
+              + json.dumps(jsonld, ensure_ascii=False) + "</script>")
     return f"""<!DOCTYPE html>
 <html lang="fi">
 <head>
@@ -84,6 +163,9 @@ def page(title, description, canonical, body, breadcrumb=""):
 <meta property="og:title" content="{esc(title)}">
 <meta property="og:description" content="{esc(description)}">
 <meta property="og:type" content="website">
+<meta property="og:url" content="{canonical}">
+<meta property="og:locale" content="fi_FI">
+{ld}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>{CSS}</style>
@@ -107,7 +189,55 @@ def taso_mark(p):
     return " ※" if p.get("taso") == "kunta" else ""
 
 
-def area_page(p, kausi):
+def _centroid(geom):
+    """Karkea keskipiste (bbox-keskikohta) mille tahansa Polygon/MultiPolygon
+    -geometrialle. Riittää naapurialueiden löytämiseen."""
+    if not geom:
+        return None
+    xs, ys = [], []
+
+    def walk(c):
+        if isinstance(c, (int, float)):
+            return
+        if c and isinstance(c[0], (int, float)):
+            xs.append(c[0])
+            ys.append(c[1])
+        else:
+            for x in c:
+                walk(x)
+    walk(geom.get("coordinates"))
+    if not xs:
+        return None
+    return (sum(xs) / len(xs), sum(ys) / len(ys))
+
+
+def _nearest(code, centroids, by_code, k=6):
+    """Palauttaa k lähintä aluetta (properties-dict) etäisyyden mukaan.
+    Etäisyys lasketaan keskipisteiden välillä; leveysasteen kosini korjaa
+    Suomen mittasuhteet karkeasti."""
+    import math
+    here = centroids.get(code)
+    if not here:
+        return []
+    lon0, lat0 = here
+    kx = math.cos(math.radians(lat0))
+    dists = []
+    for other, c in centroids.items():
+        if other == code:
+            continue
+        dx = (c[0] - lon0) * kx
+        dy = c[1] - lat0
+        dists.append((dx * dx + dy * dy, other))
+    dists.sort()
+    out = []
+    for _, other in dists[:k]:
+        p = by_code.get(other)
+        if p:
+            out.append(p)
+    return out
+
+
+def area_page(p, kausi, kunta_areas, national_median, neighbours):
     code, nimi, kunta = p["posti_alue"], p.get("nimi") or p["posti_alue"], p.get("kunta") or ""
     kslug = slugify(kunta)
     title = f"Vuokratuotto {nimi} ({code}), {kunta} — {fnum(p['brutto_pct'], 2)} %"
@@ -129,31 +259,87 @@ def area_page(p, kausi):
     ]
     trs = "\n".join(f"<tr><th>{esc(a)}</th><td class=num>{b}</td></tr>"
                     for a, b in rows)
+
+    summary = prose_summary(p, kunta_areas, national_median)
+    summary_html = f"<p>{esc(summary)}</p>" if summary else ""
+
     note = ""
     if p.get("taso") == "kunta":
         note = ('<p class="note">※ Postinumerotason tieto on tietosuojasyistä '
                 'peitetty, joten merkityissä luvuissa on käytetty koko kunnan '
                 'keskiarvoa. Se tasoittaa alueiden välisiä eroja — tulkitse '
                 'suuntaa-antavana.</p>')
-    small = ""
-    if ((isinstance(p.get("n_kaupat"), (int, float)) and p["n_kaupat"] < 10) or
-            (isinstance(p.get("n_vuokrat"), (int, float)) and p["n_vuokrat"] < 30)):
-        small = ('<p class="note">Pieni otos — alueen keskiarvot ovat '
-                 'epävarmoja.</p>')
+
+    nb_html = ""
+    if neighbours:
+        items = "".join(
+            f'<li><a href="/alue/{n["posti_alue"]}/">{n["posti_alue"]} '
+            f'{esc(n.get("nimi") or "")}</a> — {fnum(n["brutto_pct"], 2, "%")}'
+            f'</li>' for n in neighbours)
+        nb_html = (f'<h2>Lähialueet</h2><ul class="grid">{items}</ul>')
+
     body = f"""
 <h1>{esc(nimi)} <span style="color:var(--petrol)">{esc(code)}</span></h1>
 <p class="lead"><a href="/kunta/{kslug}/">{esc(kunta)}</a> · tilastovuosi {esc(kausi)}</p>
 <p class="biglabel">Bruttovuokratuotto</p>
 <p class="big">{fnum(p["brutto_pct"], 2, "%")}</p>
 <a class="btn" href="/#{esc(code)}">Näytä kartalla</a>
+{summary_html}
 <table>{trs}</table>
-{note}{small}
+{note}
+{nb_html}
 <p>Vertaa muihin alueisiin: <a href="/kunta/{kslug}/">kaikki kunnan
 {esc(kunta)} postinumeroalueet</a> tai <a href="/alueet/">koko Suomen
 hakemisto</a>. Nettotuoton oletuksia (hoitovastike, vajaakäyttö,
 varainsiirtovero) voit säätää itse <a href="/#{esc(code)}">kartalla</a>.</p>"""
     bc = f' › <a href="/kunta/{kslug}/">{esc(kunta)}</a> › {esc(code)}'
-    return page(title, desc, f"{BASE_URL}/alue/{code}/", body, bc)
+
+    canonical = f"{BASE_URL}/alue/{code}/"
+    jsonld = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "Dataset",
+                "name": f"Vuokratuotto {nimi} ({code}), {kunta}",
+                "description": desc,
+                "url": canonical,
+                "isAccessibleForFree": True,
+                "creator": {"@type": "Organization",
+                            "name": "Vuokratuottokartta"},
+                "license": "https://creativecommons.org/licenses/by/4.0/",
+                "temporalCoverage": str(kausi),
+                "variableMeasured": [
+                    {"@type": "PropertyValue",
+                     "name": "Bruttovuokratuotto",
+                     "value": p.get("brutto_pct"), "unitText": "%"},
+                    {"@type": "PropertyValue", "name": "Neliöhinta",
+                     "value": p.get("hinta_eur_m2"), "unitText": "EUR/m2"},
+                    {"@type": "PropertyValue", "name": "Keskineliövuokra",
+                     "value": p.get("vuokra_eur_m2"), "unitText": "EUR/m2/kk"},
+                ],
+                "spatialCoverage": {
+                    "@type": "Place",
+                    "name": f"{nimi}, {kunta}",
+                    "address": {"@type": "PostalAddress",
+                                "postalCode": code,
+                                "addressLocality": kunta,
+                                "addressCountry": "FI"},
+                },
+            },
+            {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {"@type": "ListItem", "position": 1, "name": "Etusivu",
+                     "item": f"{BASE_URL}/"},
+                    {"@type": "ListItem", "position": 2, "name": kunta,
+                     "item": f"{BASE_URL}/kunta/{kslug}/"},
+                    {"@type": "ListItem", "position": 3,
+                     "name": f"{nimi} ({code})", "item": canonical},
+                ],
+            },
+        ],
+    }
+    return page(title, desc, canonical, body, bc, jsonld)
 
 
 def kunta_page(kunta, areas, kausi):
@@ -239,6 +425,21 @@ def main():
     if not areas:
         raise SystemExit("Datassa ei ole yhtään aluetta, jolla on tuotto.")
 
+    # Kansallinen mediaani sanallista yhteenvetoa varten.
+    bl = sorted(p["brutto_pct"] for p in areas)
+    national_median = bl[len(bl) // 2]
+
+    # Keskipisteet naapurihakua varten (kevyt bbox-keskikohta geometriasta).
+    centroids = {}
+    for ft in fc.get("features", []):
+        pr = ft.get("properties", {})
+        code = pr.get("posti_alue")
+        if code is None or pr.get("brutto_pct") is None:
+            continue
+        c = _centroid(ft.get("geometry"))
+        if c:
+            centroids[code] = c
+
     # Siivoa vanhat generoinnit, jotta poistuneet alueet eivät jää roikkumaan.
     for d in OUT_DIRS:
         shutil.rmtree(d, ignore_errors=True)
@@ -247,13 +448,18 @@ def main():
     by_kunta = {}
     for p in areas:
         by_kunta.setdefault(str(p.get("kunta") or "Muu"), []).append(p)
+    by_code = {p["posti_alue"]: p for p in areas}
 
     for p in areas:
-        d = os.path.join("alue", p["posti_alue"])
+        code = p["posti_alue"]
+        kunta_areas = by_kunta[str(p.get("kunta") or "Muu")]
+        neighbours = _nearest(code, centroids, by_code, k=6)
+        d = os.path.join("alue", code)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
-            f.write(area_page(p, kausi))
-        urls.append(f"{BASE_URL}/alue/{p['posti_alue']}/")
+            f.write(area_page(p, kausi, kunta_areas, national_median,
+                              neighbours))
+        urls.append(f"{BASE_URL}/alue/{code}/")
 
     for kunta, plist in by_kunta.items():
         d = os.path.join("kunta", slugify(kunta))
