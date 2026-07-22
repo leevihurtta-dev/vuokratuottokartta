@@ -305,17 +305,24 @@ input[type="range"] {
   #about summary { padding: 11px 15px; font-size: 13.5px; }
   #about[open] { max-height: 62dvh; }
 
-  /* Kompaktimpi popup mobiilissa: pienemmät fontit ja tiiviimmät välit,
-     jotta tietoruutu ei peitä suurta osaa ruudusta. */
-  .maplibregl-popup { max-width: min(280px, 82vw) !important; }
-  .maplibregl-popup-content { padding: 11px 13px 10px; }
-  .pp-title { font-size: 14px; }
-  .pp-kunta { margin-bottom: 7px; }
-  .pp-scale { margin: 2px 0 7px; }
-  .pp-grid { gap: 2px 10px; font-size: 12px; }
-  .pp-grid dd.big { font-size: 13px; }
-  .pp-warn { margin-top: 7px; font-size: 11px; padding: 5px 7px; }
-  .maplibregl-popup .hint { font-size: 10.5px; }
+  /* Kompaktimpi popup mobiilissa: pienemmät fontit, tiiviimmät välit ja
+     rajattu korkeus, jottei tietoruutu peitä suurta osaa ruudusta eikä mene
+     herkästi muiden ikkunoiden päälle. */
+  .maplibregl-popup { max-width: min(240px, 74vw) !important; }
+  .maplibregl-popup-content {
+    padding: 9px 11px 9px;
+    max-height: 62dvh; overflow-y: auto;
+  }
+  .maplibregl-popup-close-button { font-size: 18px; padding: 0 6px; }
+  .pp-title { font-size: 13px; margin-right: 16px; }
+  .pp-kunta { font-size: 11px; margin-bottom: 6px; }
+  .pp-scale { margin: 2px 0 6px; }
+  .pp-scale-bar { height: 8px; }
+  .pp-scale-labels { font-size: 9px; }
+  .pp-grid { gap: 2px 8px; font-size: 11px; }
+  .pp-grid dd.big { font-size: 12px; }
+  .pp-warn { margin-top: 6px; font-size: 10.5px; padding: 5px 6px; }
+  .maplibregl-popup .hint { font-size: 10px; margin-top: 6px; }
 }
 
 /* Vaakataso / matala näyttö (esim. puhelin käännettynä): leveys voi ylittää
