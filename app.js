@@ -1,4 +1,4 @@
-/* Vuokratuottokartta — frontend
+/* Vuokratuottokartta – frontend
  * Lataa staattisen postal_yields.geojson-tiedoston ja piirtää koropleettikartan
  * bruttovuokratuotosta MapLibre GL JS:llä. Ei backendiä.
  */
@@ -199,8 +199,8 @@ function popupHTML(p) {
       ${row("Väkiluku", fmt(p.vakiluku, 0))}
       ${row("Mediaanitulo", fmt(p.mediaanitulo, 0, " €/v"))}
     </dl>
-    ${kuntaFallback ? '<p class="pp-warn">Postinumerotason tieto on peitetty — "(kunta)"-merkityt luvut ovat koko kunnan keskiarvoja, jotka tasoittavat alueiden välisiä eroja.</p>' : ""}
-    ${smallSample ? '<p class="pp-warn">Pieni otos — keskiarvot ovat epävarmoja.</p>' : ""}
+    ${kuntaFallback ? '<p class="pp-warn">Postinumerotason tieto on peitetty – "(kunta)"-merkityt luvut ovat koko kunnan keskiarvoja, jotka tasoittavat alueiden välisiä eroja.</p>' : ""}
+    ${smallSample ? '<p class="pp-warn">Pieni otos – keskiarvot ovat epävarmoja.</p>' : ""}
     <p class="hint">* oletuksillasi (säädä paneelista)</p>`;
 }
 
@@ -535,7 +535,7 @@ async function main() {
       "<p><strong>Tuottodataa ei voitu ladata.</strong><br>" +
       "Varmista, että <code>postal_yields.geojson</code> on samassa kansiossa " +
       "ja että sivu on avattu paikallisen palvelimen kautta " +
-      "(esim. <code>python -m http.server</code>) — selaimet estävät " +
+      "(esim. <code>python -m http.server</code>) – selaimet estävät " +
       "fetch-kutsut file://-osoitteista.<br><small>" + err + "</small></p>";
     return;
   }

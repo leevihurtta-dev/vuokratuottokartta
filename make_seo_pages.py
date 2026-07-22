@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-make_seo_pages.py — Generoi staattiset SEO-sivut postal_yields.geojson-datasta.
+make_seo_pages.py – Generoi staattiset SEO-sivut postal_yields.geojson-datasta.
 
 Tuottaa:
-  alue/<postinumero>/index.html   — oma sivu jokaiselle alueelle, jolla on tuotto
-  kunta/<kunta-slug>/index.html   — kuntahakemisto (alueet tuottojärjestyksessä)
-  alueet/index.html               — kaikkien kuntien hakemisto + top-listat
-  sitemap.xml, robots.txt         — hakukoneita varten
+  alue/<postinumero>/index.html   – oma sivu jokaiselle alueelle, jolla on tuotto
+  kunta/<kunta-slug>/index.html   – kuntahakemisto (alueet tuottojärjestyksessä)
+  alueet/index.html               – kaikkien kuntien hakemisto + top-listat
+  sitemap.xml, robots.txt         – hakukoneita varten
 
 Hakukoneoptimointi: jokaisella aluesivulla on ainutlaatuinen sanallinen
 yhteenveto datasta, JSON-LD-rakenteinen data (Dataset + BreadcrumbList),
-Open Graph -tiedot ja lähialueiden ristiinlinkitys — nämä parantavat
+Open Graph -tiedot ja lähialueiden ristiinlinkitys – nämä parantavat
 indeksointia ja pitkän hännän hakunäkyvyyttä.
 
 Ajetaan GitHub Actions -workflow'ssa heti fetch_data.py:n perään, jolloin
@@ -120,7 +120,7 @@ def prose_summary(p, kunta_areas, national_median):
     if p.get("taso") == "kunta":
         sentences.append(
             "Postinumerotason vuokratieto on tietosuojasyistä peitetty, joten "
-            "laskelmassa on käytetty kunnan keskiarvoa — tulkitse luku "
+            "laskelmassa on käytetty kunnan keskiarvoa – tulkitse luku "
             "suuntaa-antavana.")
     elif ((isinstance(p.get("n_kaupat"), (int, float)) and p["n_kaupat"] < 10)
           or (isinstance(p.get("n_vuokrat"), (int, float))
@@ -242,7 +242,7 @@ def _nearest(code, centroids, by_code, k=6):
 def area_page(p, kausi, kunta_areas, national_median, neighbours):
     code, nimi, kunta = p["posti_alue"], p.get("nimi") or p["posti_alue"], p.get("kunta") or ""
     kslug = slugify(kunta)
-    title = f"Vuokratuotto {nimi} ({code}), {kunta} — {fnum(p['brutto_pct'], 2)} %"
+    title = f"Vuokratuotto {nimi} ({code}), {kunta} – {fnum(p['brutto_pct'], 2)} %"
     desc = (f"{nimi} ({code}), {kunta}: bruttovuokratuotto "
             f"{fnum(p['brutto_pct'], 2)} %, neliöhinta {fnum(p['hinta_eur_m2'])} €/m², "
             f"keskineliövuokra {fnum(p['vuokra_eur_m2'], 2)} €/m²/kk. "
@@ -269,14 +269,14 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
     if p.get("taso") == "kunta":
         note = ('<p class="note">※ Postinumerotason tieto on tietosuojasyistä '
                 'peitetty, joten merkityissä luvuissa on käytetty koko kunnan '
-                'keskiarvoa. Se tasoittaa alueiden välisiä eroja — tulkitse '
+                'keskiarvoa. Se tasoittaa alueiden välisiä eroja – tulkitse '
                 'suuntaa-antavana.</p>')
 
     nb_html = ""
     if neighbours:
         items = "".join(
             f'<li><a href="/alue/{n["posti_alue"]}/">{n["posti_alue"]} '
-            f'{esc(n.get("nimi") or "")}</a> — {fnum(n["brutto_pct"], 2, "%")}'
+            f'{esc(n.get("nimi") or "")}</a> – {fnum(n["brutto_pct"], 2, "%")}'
             f'</li>' for n in neighbours)
         nb_html = (f'<h2>Lähialueet</h2><ul class="grid">{items}</ul>')
 
@@ -347,7 +347,7 @@ varainsiirtovero) voit säätää itse <a href="/#{esc(code)}">kartalla</a>.</p>
 def kunta_page(kunta, areas, kausi):
     kslug = slugify(kunta)
     areas = sorted(areas, key=lambda p: p["brutto_pct"], reverse=True)
-    title = f"Vuokratuotot {kunta} postinumeroittain — {len(areas)} aluetta"
+    title = f"Vuokratuotot {kunta} postinumeroittain – {len(areas)} aluetta"
     desc = (f"Asuntojen bruttovuokratuotot kunnassa {kunta} "
             f"postinumeroalueittain, tilastovuosi {kausi}. "
             f"Korkein {fnum(areas[0]['brutto_pct'], 2)} %, "
@@ -391,7 +391,7 @@ def index_page(by_kunta, all_areas, kausi):
         f'<li><a href="/kunta/{slugify(k)}/">{esc(k)} '
         f'({len(v)})</a></li>'
         for k, v in sorted(by_kunta.items()))
-    title = "Vuokratuotot postinumeroittain — koko Suomen hakemisto"
+    title = "Vuokratuotot postinumeroittain – koko Suomen hakemisto"
     desc = (f"Asuntojen bruttovuokratuotot koko Suomessa postinumeroalueittain "
             f"ja kunnittain, tilastovuosi {kausi}. "
             f"{len(all_areas)} aluetta, {len(by_kunta)} kuntaa. "
@@ -413,13 +413,13 @@ tilastovuosi {esc(kausi)}</p>
 
 def main():
     if not os.path.exists(DATA_FILE):
-        raise SystemExit(f"{DATA_FILE} puuttuu — aja ensin fetch_data.py")
+        raise SystemExit(f"{DATA_FILE} puuttuu – aja ensin fetch_data.py")
     with open(DATA_FILE, encoding="utf-8") as f:
         fc = json.load(f)
     meta = fc.get("metadata", {})
     kausi = meta.get("kausi", "")
     if meta.get("demo"):
-        print("VAROITUS: data on demo-dataa — sivut generoidaan silti, "
+        print("VAROITUS: data on demo-dataa – sivut generoidaan silti, "
               "mutta aja fetch_data.py ennen julkaisua.")
 
     areas = [ft["properties"] for ft in fc.get("features", [])
