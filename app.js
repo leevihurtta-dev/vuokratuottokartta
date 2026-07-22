@@ -11,10 +11,22 @@ const DATA_URL = "postal_yields.geojson";
 const BASEMAP = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 const FINLAND_BOUNDS = [[19.0, 59.6], [31.7, 70.1]];
 
-const BREAKS = [3, 4, 5, 6]; // luokkarajat: <3, 3–4, 4–5, 5–6, >6 %
-const COLORS = ["#c65f5f", "#e39b55", "#ecd06f", "#8fbf70", "#3f8f5f"];
+// Luokkarajat ja värit. Asteikko kattaa nyt matalasta korkeaan tuottoon
+// (pikkupaikkakunnilla tuotot ovat usein 8–13 %). Punainen = matala,
+// syvenevä vihreä = korkea. Rajat: <3, 3–4, 4–5, 5–6, 6–7, 7–8, 8–10, >10 %.
+const BREAKS = [3, 4, 5, 6, 7, 8, 10];
+const COLORS = [
+  "#c65f5f", // < 3 %   punainen
+  "#e39b55", // 3–4 %   oranssi
+  "#ecd06f", // 4–5 %   keltainen
+  "#a8cf7a", // 5–6 %   vaalea vihreä
+  "#8fbf70", // 6–7 %   vihreä
+  "#5fa85f", // 7–8 %   keskivihreä
+  "#3f8f5f", // 8–10 %  tummanvihreä
+  "#256b47", // > 10 %  syvä vihreä
+];
 const NODATA_COLOR = "#d3d3cf";
-const SCALE_MAX = 8; // popupin asteikkopalkin yläraja (%)
+const SCALE_MAX = 10; // popupin asteikkopalkin yläraja (%)
 
 // ---------------------------------------------------------------------------
 // Tila
