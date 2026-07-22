@@ -38,6 +38,19 @@ font-size:12.5px;color:var(--soft)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
 gap:6px;padding:0;margin:12px 0;list-style:none}
 .grid a{text-decoration:none}
+main.wide{max-width:1000px}
+#q{width:100%;max-width:420px;font-size:15px;padding:9px 11px;
+border:1px solid var(--line);border-radius:8px;background:#fff;margin:6px 0}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{color:var(--ink)}
+th.sorted-asc::after{content:" ▲";font-size:9px}
+th.sorted-desc::after{content:" ▼";font-size:9px}
+#tbl td a{text-decoration:none}
+#tbl tbody tr:hover{background:#eef2ee}
+.mk{color:var(--soft);font-weight:400;font-size:11px}
+@media (max-width:640px){main.wide{padding-left:10px;padding-right:10px}
+#tbl{font-size:12.5px}th,td{padding:6px 7px}}
 </style>
 <script data-goatcounter="https://lerpou.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
