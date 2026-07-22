@@ -239,6 +239,117 @@ def _nearest(code, centroids, by_code, k=6):
     return out
 
 
+def area_extras(p, kausi, national_median, kunta_median):
+    """Rakentaa aluesivun lisäosiot: esimerkkilaskelma (45 m² kaksio),
+    vertailu maan/kunnan keskiarvoon, takaisinmaksuaika ja usein kysyttyä.
+    Palauttaa (html, faq_jsonld). Näytetään vain, jos hinta ja vuokra ovat
+    käytettävissä."""
+    nimi = p.get("nimi") or p["posti_alue"]
+    kunta = p.get("kunta") or ""
+    b = p.get("brutto_pct")
+    netto = p.get("netto_pct")
+    h = p.get("hinta_eur_m2")
+    v = p.get("vuokra_eur_m2")
+    if b is None or not h or not v:
+        return "", None
+
+    # --- Esimerkkilaskelma: 45 m² kaksio ---
+    M2 = 45
+    hinta_yht = h * M2
+    vuokra_kk = v * M2
+    vuokra_v = vuokra_kk * 12
+    # nettovuokra (samat oletukset kuin sivun netto_pct: hoito 4,5 €/m²/kk,
+    # vajaakäyttö 5 %, ei rahoitusvastiketta/remontteja).
+    hoito_kk = 4.5 * M2
+    netto_v = (vuokra_kk - hoito_kk) * 12 * 0.95
+    esimerkki = f"""
+<h2>Esimerkkilaskelma: 45 m² kaksio</h2>
+<p>Havainnollistava esimerkki alueen keskiarvoilla. Todellinen kohde voi
+poiketa merkittävästi – tämä auttaa hahmottamaan luvut euroina.</p>
+<table>
+<tr><th>Velaton hinta (45 m²)</th><td class=num>{fnum(hinta_yht, 0, "€")}</td></tr>
+<tr><th>Vuokra kuukaudessa</th><td class=num>{fnum(vuokra_kk, 0, "€/kk")}</td></tr>
+<tr><th>Vuokratulo vuodessa</th><td class=num>{fnum(vuokra_v, 0, "€/v")}</td></tr>
+<tr><th>Bruttovuokratuotto</th><td class=num>{fnum(b, 2, "%")}</td></tr>
+<tr><th>Arvioitu nettotulo vuodessa*</th><td class=num>{fnum(netto_v, 0, "€/v")}</td></tr>
+<tr><th>Nettovuokratuotto*</th><td class=num>{fnum(netto, 2, "%")}</td></tr>
+</table>
+<p class="about-links">* Oletuksin: hoitovastike 4,5 €/m²/kk, vajaakäyttö 5 %.
+Ei sisällä remontteja, rahoitusvastiketta, rahoituskuluja eikä
+varainsiirtoveroa. Nettotuoton oletuksia voi säätää
+<a href="/#{p['posti_alue']}">kartalla</a>.</p>"""
+
+    # --- Vertailu ---
+    def suhde(x, ref, mika):
+        if ref is None:
+            return ""
+        ero = x - ref
+        if ero >= 0.5:
+            return f"{mika} keskitasoa ({fnum(ref, 2)} %) korkeampi"
+        if ero <= -0.5:
+            return f"{mika} keskitasoa ({fnum(ref, 2)} %) matalampi"
+        return f"lähellä {mika} keskitasoa ({fnum(ref, 2)} %)"
+    vertailut = []
+    s1 = suhde(b, kunta_median, f"kunnan {kunta}")
+    s2 = suhde(b, national_median, "koko maan")
+    if s1:
+        vertailut.append(s1)
+    if s2:
+        vertailut.append(s2)
+    vertailu = ""
+    if vertailut:
+        vertailu = (f'<h2>Miten tuotto vertautuu?</h2><p>Alueen '
+                    f'{fnum(b, 2)} %:n bruttovuokratuotto on '
+                    + " ja ".join(vertailut) + ".</p>")
+
+    # --- Takaisinmaksuaika ---
+    vuodet = round(100 / b, 0) if b else None
+    netto_vuodet = round(100 / netto, 0) if netto and netto > 0 else None
+    takaisin = ""
+    if vuodet:
+        nettolause = (f" Nettotuotolla ({fnum(netto, 2)} %) vastaava aika on "
+                      f"noin {fnum(netto_vuodet, 0)} vuotta."
+                      if netto_vuodet else "")
+        takaisin = (f'<h2>Takaisinmaksuaika</h2><p>Bruttovuokratuotolla '
+                    f'{fnum(b, 2)} % sijoitus maksaisi itsensä takaisin '
+                    f'pelkillä vuokratuloilla noin {fnum(vuodet, 0)} vuodessa '
+                    f'(ennen kuluja ja veroja).{nettolause} Luku on '
+                    f'suuntaa-antava eikä huomioi arvonmuutosta tai '
+                    f'rahoitusta.</p>')
+
+    # --- Usein kysyttyä (myös FAQ-rakenteinen data) ---
+    faqs = [
+        (f"Mikä on vuokratuotto alueella {nimi} ({p['posti_alue']})?",
+         f"Vanhojen osakeasuntojen keskimääräinen bruttovuokratuotto alueella "
+         f"{nimi} on {fnum(b, 2)} % (tilastovuosi {kausi}, lähde "
+         f"Tilastokeskus). Nettovuokratuotto on tyypillisillä oletuksilla "
+         f"noin {fnum(netto, 2)} %."),
+        (f"Paljonko asunnot maksavat alueella {nimi}?",
+         f"Vanhojen osakeasuntojen keskimääräinen neliöhinta on "
+         f"{fnum(h, 0)} €/m² ja keskineliövuokra {fnum(v, 2)} €/m²/kk. "
+         f"Esimerkiksi 45 m² kaksio maksaisi keskimäärin noin "
+         f"{fnum(h * 45, 0)} €."),
+        ("Onko korkea vuokratuotto aina hyvä asia?",
+         "Ei välttämättä. Korkea laskennallinen tuotto liittyy usein "
+         "matalampiin hintoihin ja voi kertoa hitaammasta arvonkehityksestä "
+         "tai suuremmasta vuokrausriskistä. Tuotto kannattaa suhteuttaa "
+         "alueen väestö- ja hintakehitykseen sekä vuokrakysyntään."),
+    ]
+    faq_html = "<h2>Usein kysyttyä</h2>" + "".join(
+        f"<h3 style=\"font-size:14px;margin:12px 0 3px\">{esc(q)}</h3>"
+        f"<p>{esc(a)}</p>" for q, a in faqs)
+    faq_jsonld = {
+        "@type": "FAQPage",
+        "mainEntity": [
+            {"@type": "Question", "name": q,
+             "acceptedAnswer": {"@type": "Answer", "text": a}}
+            for q, a in faqs],
+    }
+
+    html_out = esimerkki + vertailu + takaisin + faq_html
+    return html_out, faq_jsonld
+
+
 def area_page(p, kausi, kunta_areas, national_median, neighbours):
     code, nimi, kunta = p["posti_alue"], p.get("nimi") or p["posti_alue"], p.get("kunta") or ""
     kslug = slugify(kunta)
@@ -280,6 +391,13 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
             f'</li>' for n in neighbours)
         nb_html = (f'<h2>Lähialueet</h2><ul class="grid">{items}</ul>')
 
+    # Lisäosiot: esimerkkilaskelma, vertailu, takaisinmaksuaika, usein kysyttyä.
+    kb = sorted(a["brutto_pct"] for a in kunta_areas
+                if a.get("brutto_pct") is not None)
+    kunta_median = kb[len(kb) // 2] if kb else None
+    extras_html, faq_jsonld = area_extras(p, kausi, national_median,
+                                          kunta_median)
+
     body = f"""
 <h1>{esc(nimi)} <span style="color:var(--petrol)">{esc(code)}</span></h1>
 <p class="lead"><a href="/kunta/{kslug}/">{esc(kunta)}</a> · tilastovuosi {esc(kausi)}</p>
@@ -289,6 +407,7 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
 {summary_html}
 <table>{trs}</table>
 {note}
+{extras_html}
 {nb_html}
 <p>Vertaa muihin alueisiin: <a href="/kunta/{kslug}/">kaikki kunnan
 {esc(kunta)} postinumeroalueet</a> tai <a href="/alueet/">koko Suomen
@@ -341,6 +460,8 @@ varainsiirtovero) voit säätää itse <a href="/#{esc(code)}">kartalla</a>.</p>
             },
         ],
     }
+    if faq_jsonld:
+        jsonld["@graph"].append(faq_jsonld)
     return page(title, desc, canonical, body, bc, jsonld)
 
 
