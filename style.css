@@ -179,7 +179,7 @@ input[type="range"] {
 
 /* ---------- Legenda ---------- */
 #legend {
-  position: fixed; left: 12px; bottom: 26px; z-index: 20;
+  position: fixed; right: 12px; bottom: 84px; z-index: 20;
   background: rgba(255, 255, 255, .94); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 10px 12px;
   font-size: 12px;
@@ -291,7 +291,7 @@ input[type="range"] {
   body.has-banner #panel { top: auto; }
   #panel.closed { transform: translateY(102%); opacity: 1; }
 
-  #legend { bottom: auto; top: 64px; left: 10px; padding: 8px 10px; font-size: 11px; }
+  #legend { bottom: auto; top: 64px; left: 10px; right: auto; padding: 8px 10px; font-size: 11px; }
   body.has-banner #legend { top: 116px; }
 
   /* Avattava sisältöosio mobiilissa: kavennettuna oikeaan yläkulmaan brändin
