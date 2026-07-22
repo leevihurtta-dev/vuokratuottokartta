@@ -385,8 +385,14 @@ function initMap(data) {
     minZoom: 3.5,
     maxZoom: 15,
   });
-  map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
-  map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: false }));
+  // Napit vasempaan alanurkkaan: oikeassa yläkulmassa on otsikko (#brand),
+  // jonka päälle napit menivät etenkin mobiilissa. Vasen alanurkka on vapaa
+  // sekä työpöydällä että mobiilissa.
+  map.addControl(
+    new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
+  map.addControl(
+    new maplibregl.GeolocateControl({ trackUserLocation: false }),
+    "bottom-left");
 
   map.on("load", () => {
     map.addSource("postal", { type: "geojson", data, generateId: true });
