@@ -192,6 +192,22 @@ input[type="range"] {
   border: 1px solid rgba(0, 0, 0, .12);
 }
 
+/* ---------- Hover-vihje (postinumero + nimi, työpöytä) ---------- */
+.hover-tip { pointer-events: none; }
+.hover-tip .maplibregl-popup-content {
+  padding: 4px 9px; border-radius: 6px;
+  background: var(--ink); color: var(--paper);
+  box-shadow: 0 2px 8px rgba(17, 28, 39, .28);
+  font-family: var(--font-ui); font-size: 12.5px; white-space: nowrap;
+}
+.hover-tip .maplibregl-popup-tip {
+  border-top-color: var(--ink); border-bottom-color: var(--ink);
+}
+.hover-tip .ht-code {
+  font-family: var(--font-data); font-weight: 600; color: #9fe0c4;
+}
+.hover-tip .ht-name { color: var(--paper); }
+
 /* ---------- Popup ---------- */
 .maplibregl-popup { max-width: 320px !important; }
 .maplibregl-popup-content {
@@ -353,6 +369,11 @@ input[type="range"] {
   #brand { top: 8px; right: 8px; padding: 5px 9px; }
   #brand h1 { font-size: 14px; }
   #legend { display: none; }
+}
+
+/* Hover-vihje pois kosketusnäytöiltä varmuuden vuoksi. */
+@media (hover: none) {
+  .hover-tip { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

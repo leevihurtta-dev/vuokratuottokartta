@@ -50,6 +50,7 @@ let popupProps = null;           // avoimen popupin alueen ominaisuudet
 let popupLngLat = null;
 let searchIndex = [];            // {code, nimi, kunta, bbox, center, label}
 let hoveredId = null;
+let hoverTip = null;             // kevyt vihje (postinumero + nimi) hoverilla
 
 const $ = (id) => document.getElementById(id);
 const nf = (dec) => new Intl.NumberFormat("fi-FI", {
@@ -492,10 +493,35 @@ function initMap(data) {
       openPopup(e.lngLat, feats[0].properties);
     });
 
-    // Hover-korostus
+    // Kevyt vihje: näyttää postinumeron ja nimen hiiren kohdalla ilman että
+    // popup avautuu. Vain työpöydällä (mobiilissa ei hoveria). Ei sulkunappia,
+    // ei osu hiireen (closeOnClick pois, ei omaa pointer-eventtiä CSS:ssä).
+    hoverTip = new maplibregl.Popup({
+      closeButton: false, closeOnClick: false, offset: 12,
+      className: "hover-tip", maxWidth: "240px",
+    });
+
+    // Hover-korostus + vihje
     map.on("mousemove", "postal-base", (e) => {
       map.getCanvas().style.cursor = "pointer";
-      const id = e.features?.[0]?.id;
+      const f = e.features?.[0];
+      const id = f?.id;
+
+      // Vihjeen sisältö ja sijainti (seuraa kursoria)
+      const pr = f?.properties || {};
+      const koodi = pr.posti_alue || "";
+      const nimi = pr.nimi || "";
+      if (koodi || nimi) {
+        hoverTip
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<span class="ht-code">${koodi}</span>` +
+            (nimi ? ` <span class="ht-name">${nimi}</span>` : ""))
+          .addTo(map);
+      } else {
+        hoverTip.remove();
+      }
+
       if (id === hoveredId) return;
       if (hoveredId !== null) {
         map.setFeatureState({ source: "postal", id: hoveredId }, { hover: false });
@@ -507,6 +533,7 @@ function initMap(data) {
     });
     map.on("mouseleave", "postal-base", () => {
       map.getCanvas().style.cursor = "";
+      if (hoverTip) hoverTip.remove();
       if (hoveredId !== null) {
         map.setFeatureState({ source: "postal", id: hoveredId }, { hover: false });
         hoveredId = null;
