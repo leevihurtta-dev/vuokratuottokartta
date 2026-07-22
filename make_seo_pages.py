@@ -55,6 +55,19 @@ font-size:12.5px;color:var(--soft)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
 gap:6px;padding:0;margin:12px 0;list-style:none}
 .grid a{text-decoration:none}
+main.wide{max-width:1000px}
+#q{width:100%;max-width:420px;font-size:15px;padding:9px 11px;
+border:1px solid var(--line);border-radius:8px;background:#fff;margin:6px 0}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{color:var(--ink)}
+th.sorted-asc::after{content:" ▲";font-size:9px}
+th.sorted-desc::after{content:" ▼";font-size:9px}
+#tbl td a{text-decoration:none}
+#tbl tbody tr:hover{background:#eef2ee}
+.mk{color:var(--soft);font-weight:400;font-size:11px}
+@media (max-width:640px){main.wide{padding-left:10px;padding-right:10px}
+#tbl{font-size:12.5px}th,td{padding:6px 7px}}
 """
 
 
@@ -147,7 +160,8 @@ def fnum(v, dec=0, unit=""):
     return s + ("\u00a0" + unit if unit else "")
 
 
-def page(title, description, canonical, body, breadcrumb="", jsonld=None):
+def page(title, description, canonical, body, breadcrumb="", jsonld=None,
+         wide=False):
     ld = ""
     if jsonld:
         ld = ('<script type="application/ld+json">'
@@ -173,7 +187,7 @@ def page(title, description, canonical, body, breadcrumb="", jsonld=None):
         async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
-<main>
+<main{' class="wide"' if wide else ''}>
 <p class="crumb"><a href="/">Vuokratuottokartta</a>{breadcrumb}</p>
 {body}
 <footer>
@@ -498,38 +512,117 @@ postinumerotason tieto on peitetty.</p>
 
 
 def index_page(by_kunta, all_areas, kausi):
-    top = sorted((p for p in all_areas
-                  if isinstance(p.get("n_kaupat"), (int, float))
-                  and p["n_kaupat"] >= 20 and p.get("taso") == "pno"),
-                 key=lambda p: p["brutto_pct"], reverse=True)[:20]
-    toprs = "\n".join(
-        f'<tr><td><a href="/alue/{p["posti_alue"]}/">{p["posti_alue"]} '
-        f'{esc(p.get("nimi") or "")}</a> ({esc(p.get("kunta") or "")})</td>'
-        f'<td class=num>{fnum(p["brutto_pct"], 2, "%")}</td>'
-        f'<td class=num>{fnum(p["n_kaupat"])}</td></tr>'
-        for p in top)
     kuntas = "\n".join(
         f'<li><a href="/kunta/{slugify(k)}/">{esc(k)} '
         f'({len(v)})</a></li>'
         for k, v in sorted(by_kunta.items()))
-    title = "Vuokratuotot postinumeroittain – koko Suomen hakemisto"
-    desc = (f"Asuntojen bruttovuokratuotot koko Suomessa postinumeroalueittain "
-            f"ja kunnittain, tilastovuosi {kausi}. "
-            f"{len(all_areas)} aluetta, {len(by_kunta)} kuntaa. "
-            f"Data: Tilastokeskus.")
+    title = "Vuokratuotot postinumeroittain – koko Suomen lista ja hakemisto"
+    desc = (f"Selaa asuntojen bruttovuokratuottoja koko Suomessa "
+            f"postinumeroalueittain listana: järjestä tuoton, hinnan, vuokran "
+            f"tai nimen mukaan. {len(all_areas)} aluetta, {len(by_kunta)} "
+            f"kuntaa. Tilastovuosi {kausi}, lähde Tilastokeskus.")
+
+    # Kaikki alueet kompaktina datana selainpuolen lajittelua varten.
+    rows_data = [{
+        "c": p["posti_alue"],
+        "n": p.get("nimi") or "",
+        "k": p.get("kunta") or "",
+        "b": p.get("brutto_pct"),
+        "net": p.get("netto_pct"),
+        "h": p.get("hinta_eur_m2"),
+        "v": p.get("vuokra_eur_m2"),
+        "kp": p.get("n_kaupat") if isinstance(p.get("n_kaupat"), (int, float)) else None,
+        "t": 1 if p.get("taso") == "kunta" else 0,
+    } for p in all_areas]
+    data_json = json.dumps(rows_data, ensure_ascii=False, separators=(",", ":"))
+
     body = f"""
-<h1>Vuokratuotot alueittain</h1>
+<h1>Vuokratuotot alueittain – lista</h1>
 <p class="lead">{len(all_areas)} postinumeroaluetta · {len(by_kunta)} kuntaa ·
-tilastovuosi {esc(kausi)}</p>
+tilastovuosi {esc(kausi)}. Järjestä saraketta klikkaamalla.</p>
 <p><a class="btn" href="/">Avaa kartta</a></p>
-<h2>Korkeimmat bruttotuotot (väh. 20 kauppaa, postinumerotason data)</h2>
-<table>
-<tr><th>Alue</th><th class=num>Brutto</th><th class=num>Kauppoja</th></tr>
-{toprs}
+
+<input id="q" type="search" placeholder="Suodata: postinumero, alue tai kunta…"
+       autocomplete="off" aria-label="Suodata listaa">
+<p id="count" class="lead"></p>
+
+<div class="table-wrap">
+<table id="tbl">
+<thead><tr>
+<th data-k="c" class="sortable">Postinumero</th>
+<th data-k="n" class="sortable">Alue</th>
+<th data-k="k" class="sortable">Kunta</th>
+<th data-k="b" class="sortable num sorted-desc">Brutto&nbsp;%</th>
+<th data-k="net" class="sortable num">Netto&nbsp;%</th>
+<th data-k="h" class="sortable num">€/m²</th>
+<th data-k="v" class="sortable num">Vuokra</th>
+<th data-k="kp" class="sortable num">Kauppoja</th>
+</tr></thead>
+<tbody id="tbody"></tbody>
 </table>
-<h2>Kunnat</h2>
-<ul class="grid">{kuntas}</ul>"""
-    return page(title, desc, f"{BASE_URL}/alueet/", body, " › Alueet")
+</div>
+
+<h2>Selaa kunnittain</h2>
+<ul class="grid">{kuntas}</ul>
+
+<script>
+const DATA = {data_json};
+const tbody = document.getElementById("tbody");
+const q = document.getElementById("q");
+const countEl = document.getElementById("count");
+let sortKey = "b", sortDir = -1;   // oletus: korkein brutto ensin
+const numKeys = new Set(["b","net","h","v","kp"]);
+
+function fmt(x, dec, unit) {{
+  if (x === null || x === undefined) return "–";
+  const s = Number(x).toLocaleString("fi-FI",
+    {{minimumFractionDigits:dec, maximumFractionDigits:dec}});
+  return unit ? s + unit : s;
+}}
+function render() {{
+  const term = q.value.trim().toLowerCase();
+  let rows = DATA;
+  if (term) rows = rows.filter(r =>
+    (r.c+" "+r.n+" "+r.k).toLowerCase().includes(term));
+  rows = rows.slice().sort((a,b) => {{
+    let x=a[sortKey], y=b[sortKey];
+    if (numKeys.has(sortKey)) {{
+      x = (x===null||x===undefined)?-Infinity:x;
+      y = (y===null||y===undefined)?-Infinity:y;
+      return (x-y)*sortDir;
+    }}
+    return String(x).localeCompare(String(y),"fi")*sortDir;
+  }});
+  countEl.textContent = rows.length + " aluetta";
+  const kunta = (r) => r.t ? ' <span class="mk">(kunta)</span>' : '';
+  tbody.innerHTML = rows.map(r =>
+    `<tr>`+
+    `<td><a href="/alue/${{r.c}}/">${{r.c}}</a></td>`+
+    `<td><a href="/alue/${{r.c}}/">${{r.n}}</a></td>`+
+    `<td>${{r.k}}</td>`+
+    `<td class=num>${{fmt(r.b,2," %")}}${{kunta(r)}}</td>`+
+    `<td class=num>${{fmt(r.net,2," %")}}</td>`+
+    `<td class=num>${{fmt(r.h,0)}}</td>`+
+    `<td class=num>${{fmt(r.v,2)}}</td>`+
+    `<td class=num>${{fmt(r.kp,0)}}</td>`+
+    `</tr>`).join("");
+}}
+document.querySelectorAll("th.sortable").forEach(th => {{
+  th.addEventListener("click", () => {{
+    const k = th.dataset.k;
+    if (sortKey === k) {{ sortDir = -sortDir; }}
+    else {{ sortKey = k; sortDir = numKeys.has(k) ? -1 : 1; }}
+    document.querySelectorAll("th").forEach(h =>
+      h.classList.remove("sorted-asc","sorted-desc"));
+    th.classList.add(sortDir>0 ? "sorted-asc" : "sorted-desc");
+    render();
+  }});
+}});
+q.addEventListener("input", render);
+render();
+</script>"""
+    return page(title, desc, f"{BASE_URL}/alueet/", body, " › Alueet",
+                wide=True)
 
 
 def main():
