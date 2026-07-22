@@ -185,6 +185,13 @@ function popupHTML(p) {
     (typeof p.n_kaupat === "number" && p.n_kaupat < 10) ||
     (typeof p.n_vuokrat === "number" && p.n_vuokrat < 30));
 
+  // Linkki alueen omalle sivulle (SEO-sivu): tuo lisätiedot, sanallisen
+  // yhteenvedon ja lähialueet. Näytetään vain alueille, joilla on tuotto
+  // (eli joille sivu on generoitu).
+  const detailLink = (brutto !== null && p.posti_alue)
+    ? `<a class="pp-more" href="/alue/${p.posti_alue}/">Katso lisätiedot ja lähialueet →</a>`
+    : "";
+
   return `
     <h3 class="pp-title"><span class="code">${p.posti_alue}</span> ${p.nimi ?? ""}</h3>
     <p class="pp-kunta">${p.kunta ?? ""}</p>
@@ -201,6 +208,7 @@ function popupHTML(p) {
     </dl>
     ${kuntaFallback ? '<p class="pp-warn">Postinumerotason tieto on peitetty – "(kunta)"-merkityt luvut ovat koko kunnan keskiarvoja, jotka tasoittavat alueiden välisiä eroja.</p>' : ""}
     ${smallSample ? '<p class="pp-warn">Pieni otos – keskiarvot ovat epävarmoja.</p>' : ""}
+    ${detailLink}
     <p class="hint">* oletuksillasi (säädä paneelista)</p>`;
 }
 

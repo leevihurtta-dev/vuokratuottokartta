@@ -233,6 +233,12 @@ input[type="range"] {
   margin: 10px 0 0; font-size: 11.5px; color: #8a5a12;
   background: #fdf3dd; border-radius: 6px; padding: 6px 8px;
 }
+.pp-more {
+  display: block; margin: 11px 0 0;
+  font-weight: 600; font-size: 12.5px; color: var(--petrol);
+  text-decoration: none;
+}
+.pp-more:hover { text-decoration: underline; }
 
 /* ---------- Avattava sisältö-/SEO-osio ---------- */
 #about {
