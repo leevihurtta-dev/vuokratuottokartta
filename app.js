@@ -207,7 +207,7 @@ function popupHTML(p) {
       ${row("Väkiluku", fmt(p.vakiluku, 0))}
       ${row("Mediaanitulo", fmt(p.mediaanitulo, 0, " €/v"))}
     </dl>
-    ${kuntaFallback ? '<p class="pp-warn">Postinumerotason tieto on peitetty – "(kunta)"-merkityt luvut ovat koko kunnan keskiarvoja, jotka tasoittavat alueiden välisiä eroja.</p>' : ""}
+    ${kuntaFallback ? '<p class="pp-warn">"(kunta)"-merkityt luvut ovat kunnan keskiarvoja (postinumerotason tieto peitetty).</p>' : ""}
     ${smallSample ? '<p class="pp-warn">Pieni otos – keskiarvot ovat epävarmoja.</p>' : ""}
     ${detailLink}
     <p class="hint">* oletuksillasi (säädä paneelista)</p>`;
