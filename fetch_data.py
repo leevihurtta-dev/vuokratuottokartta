@@ -38,6 +38,7 @@ Riippuvuudet: vain Pythonin standardikirjasto. Geometrian yksinkertaistus
 import argparse
 import datetime as _dt
 import json
+import math
 import re
 import sys
 import time
@@ -725,6 +726,107 @@ def netto_pct(hinta, vuokra,
     return None
 
 
+def apply_modeled_rent(features):
+    """Kun postinumerohinta on aitoa dataa mutta vuokra jäisi kuntatason
+    keskiarvoon (peitetty), arvioidaan vuokra alueen OMASTA hinnasta kunnan
+    sisäisellä hinta–vuokra-suhteella:  R = R0 * (hinta/hinta0)^beta.
+
+    Tämä poistaa systemaattisen vinouman, jossa tasainen kuntakeskivuokra
+    aliarvioi kunnan kalliiden alueiden ja yliarvioi halpojen alueiden tuoton
+    (vuokra vaihtelee hintaa loivemmin). Kunnissa, joissa on tarpeeksi aitoa
+    dataa (>=6 aluetta), käytetään kunnan omaa log-log-regressiota; muuten
+    kunnan keskiarvoja säädetään kaikkien kuntien sisäisellä pooled-joustolla.
+
+    Muokatut alueet merkitään vuokra_taso = taso = 'malli' ja n_vuokrat = None.
+    Palauttaa mallinnettujen alueiden määrän. Ei kosketa alueisiin, joilla on
+    aito vuokra tai joilla myös hinta on peitetty.
+    """
+    props = [f.get("properties", {}) for f in features]
+
+    def real(p):
+        return (p.get("hinta_taso") == "pno" and p.get("vuokra_taso") == "pno"
+                and p.get("hinta_eur_m2") and p.get("vuokra_eur_m2")
+                and p["hinta_eur_m2"] > 0 and p["vuokra_eur_m2"] > 0)
+
+    both = [p for p in props if real(p)]
+    if len(both) < 30:
+        print("[malli] Liian vähän aitoa dataa vuokran mallintamiseen "
+              f"({len(both)} aluetta) – ohitetaan.")
+        return 0
+
+    def ols(ps):
+        lx = [math.log(p["hinta_eur_m2"]) for p in ps]
+        ly = [math.log(p["vuokra_eur_m2"]) for p in ps]
+        n = len(lx)
+        mx = sum(lx) / n
+        my = sum(ly) / n
+        sxx = sum((x - mx) ** 2 for x in lx)
+        if sxx == 0:
+            return my, 0.0
+        b = sum((x - mx) * (y - my) for x, y in zip(lx, ly)) / sxx
+        return my - b * mx, b
+
+    by_muni = {}
+    for p in both:
+        by_muni.setdefault(p.get("kunta"), []).append(p)
+    coef = {k: ols(ps) for k, ps in by_muni.items() if len(ps) >= 6}
+
+    # kunnan sisäinen pooled-jousto (fixed effects) varakeinoksi
+    dx, dy = [], []
+    for k, ps in by_muni.items():
+        if len(ps) < 3:
+            continue
+        lx = [math.log(p["hinta_eur_m2"]) for p in ps]
+        ly = [math.log(p["vuokra_eur_m2"]) for p in ps]
+        mx = sum(lx) / len(lx)
+        my = sum(ly) / len(ly)
+        for a, b in zip(lx, ly):
+            dx.append(a - mx)
+            dy.append(b - my)
+    sxx = sum(x * x for x in dx)
+    beta_pool = (sum(a * b for a, b in zip(dx, dy)) / sxx) if sxx else 0.3
+
+    # ankkurit pooled-menetelmälle: R0 = kunnan keskivuokra (peitettyjen
+    # alueiden fallback-arvo), hinta0 = kunnan kauppapainotettu keskihinta
+    R0 = {}
+    for p in props:
+        if p.get("vuokra_taso") == "kunta" and p.get("vuokra_eur_m2"):
+            R0[p.get("kunta")] = p["vuokra_eur_m2"]
+    acc = {}
+    for p in props:
+        if p.get("hinta_taso") == "pno" and p.get("hinta_eur_m2"):
+            w = p.get("n_kaupat") or 1
+            s = acc.setdefault(p.get("kunta"), [0.0, 0.0])
+            s[0] += p["hinta_eur_m2"] * w
+            s[1] += w
+    P0 = {k: s / w for k, (s, w) in acc.items() if w}
+
+    n_model = 0
+    for p in props:
+        if not (p.get("hinta_taso") == "pno"
+                and p.get("vuokra_taso") == "kunta"):
+            continue
+        h = p.get("hinta_eur_m2")
+        if not h or h <= 0:
+            continue
+        k = p.get("kunta")
+        if k in coef:
+            a, b = coef[k]
+            rent = math.exp(a + b * math.log(h))
+        elif k in R0 and k in P0 and P0[k] > 0:
+            rent = R0[k] * (h / P0[k]) ** beta_pool
+        else:
+            continue  # ei mallia -> jätetään kuntatason keskiarvoksi
+        p["vuokra_eur_m2"] = round(rent, 2)
+        p["vuokra_taso"] = "malli"
+        p["n_vuokrat"] = None
+        p["brutto_pct"] = brutto_pct(h, rent)
+        p["netto_pct"] = netto_pct(h, rent)
+        p["taso"] = "malli"
+        n_model += 1
+    return n_model
+
+
 # ----------------------------------------------------------------------------
 # Pääohjelma
 # ----------------------------------------------------------------------------
@@ -748,6 +850,10 @@ def main():
     ap.add_argument("--no-fallback", action="store_true",
                     help="Älä täydennä peitettyjä postinumeroalueita "
                          "kuntatason keskiarvoilla (oletuksena täydennetään).")
+    ap.add_argument("--no-model", action="store_true",
+                    help="Älä mallinna vuokraa alueille, joilla hinta on aitoa "
+                         "mutta vuokra peitetty; jätä ne kuntatason keskiarvoon "
+                         "(oletuksena vuokra mallinnetaan).")
     ap.add_argument("--out", default="postal_yields.geojson")
     args = ap.parse_args()
 
@@ -953,6 +1059,16 @@ def main():
             },
         })
 
+    # --- Vaihe 2c: mallinnettu vuokra (aito hinta + peitetty vuokra) --------
+    # Korvaa kuntatason keskivuokran alueen omasta hinnasta arvioidulla
+    # vuokralla, jotta kalliiden/halpojen alueiden tuotto ei vinoudu.
+    n_model = 0
+    if not args.no_fallback and not args.no_model:
+        n_model = apply_modeled_rent(out_features)
+    # laskurit mallinnuksen jälkeen (osa taso='kunta' muuttui 'malli'ksi)
+    n_fallback = sum(1 for f in out_features
+                     if f["properties"].get("taso") == "kunta")
+
     fc = {
         "type": "FeatureCollection",
         "metadata": {
@@ -989,6 +1105,9 @@ def main():
     if n_fallback:
         print(f"  …joista kuntatason keskiarvolla täydennettyjä: {n_fallback} "
               f"(merkitty taso='kunta')")
+    if n_model:
+        print(f"  …joista mallinnetulla vuokralla: {n_model} "
+              f"(aito hinta + arvioitu vuokra, taso='malli')")
     if bruttos:
         print(f"  Brutto min/mediaani/max: {bruttos[0]} / {med} / {bruttos[-1]} % "
               f"(järkevä haarukka kaupungeissa ~3–6 %)")

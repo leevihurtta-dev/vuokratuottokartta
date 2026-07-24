@@ -106,8 +106,10 @@ function fillFilter() {
       [">=", ["coalesce", ["get", "n_kaupat"], 0], state.minKaupat]],
   ];
   // Vanhoissa datatiedostoissa taso-kenttää ei ole -> coalesce "pno".
+  // Piilotetaan vain kuntatason keskiarvot; mallinnetut (aito hinta +
+  // arvioitu vuokra) jäävät näkyviin, koska ne eivät ole kuntakeskiarvoja.
   if (!state.allowKunta) {
-    f.push(["==", ["coalesce", ["get", "taso"], "pno"], "pno"]);
+    f.push(["!=", ["coalesce", ["get", "taso"], "pno"], "kunta"]);
   }
   return f;
 }
@@ -169,9 +171,12 @@ function popupHTML(p) {
       </div>`;
   }
 
-  // Kuntatason keskiarvolla täydennetyt arvot merkitään.
+  // Kuntatason keskiarvolla täydennetyt (kunta) ja mallinnetut (arvio) merkitään.
   const lvl = (v, taso) =>
-    (v !== null && taso === "kunta") ? `${v}\u00a0(kunta)` : v;
+    (v === null || v === undefined) ? v
+      : taso === "kunta" ? `${v}\u00a0(kunta)`
+      : taso === "malli" ? `${v}\u00a0(arvio)`
+      : v;
   // Lukumäärärivit: jos itse arvo (hinta/vuokra) on olemassa mutta
   // lukumäärä puuttuu (esim. peitetty tai kuntataulukossa ei julkaista),
   // näytetään "–" eikä harhaanjohtavaa "ei dataa".
@@ -198,8 +203,8 @@ function popupHTML(p) {
     <p class="pp-kunta">${p.kunta ?? ""}</p>
     ${scale}
     <dl class="pp-grid">
-      ${row("Bruttotuotto", fmt(brutto, 2, " %"), "big")}
-      ${row("Nettotuotto*", fmt(netto, 2, " %"), "big")}
+      ${row("Bruttotuotto", lvl(fmt(brutto, 2, " %"), p.taso === "malli" ? "malli" : null), "big")}
+      ${row("Nettotuotto*", lvl(fmt(netto, 2, " %"), p.taso === "malli" ? "malli" : null), "big")}
       ${row("Neliöhinta", lvl(fmt(p.hinta_eur_m2, 0, " €/m²"), p.hinta_taso))}
       ${row("Keskineliövuokra", lvl(fmt(p.vuokra_eur_m2, 2, " €/m²/kk"), p.vuokra_taso))}
       ${row("Kauppoja", cnt(p.n_kaupat, p.hinta_eur_m2, p.hinta_taso))}

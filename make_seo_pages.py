@@ -171,6 +171,12 @@ def prose_summary(p, kunta_areas, national_median):
             "Postinumerotason vuokratieto on tietosuojasyistä peitetty, joten "
             "laskelmassa on käytetty kunnan keskiarvoa – tulkitse luku "
             "suuntaa-antavana.")
+    elif p.get("vuokra_taso") == "malli":
+        sentences.append(
+            "Postinumerotason vuokratietoa ei julkaista tälle alueelle, joten "
+            "keskineliövuokra ja siitä laskettu tuotto ovat arvioita: vuokra on "
+            "mallinnettu alueen toteutuneesta neliöhinnasta. Neliöhinta ja "
+            "kauppamäärä ovat aitoa postinumerotason dataa.")
     elif ((isinstance(p.get("n_kaupat"), (int, float)) and p["n_kaupat"] < 10)
           or (isinstance(p.get("n_vuokrat"), (int, float))
               and p["n_vuokrat"] < 30)):
@@ -243,7 +249,11 @@ poiketa merkittävästi alueen keskiarvosta.
 
 
 def taso_mark(p):
-    return " ※" if p.get("taso") == "kunta" else ""
+    if p.get("taso") == "kunta":
+        return " ※"
+    if p.get("taso") == "malli":
+        return " △"
+    return ""
 
 
 def _centroid(geom):
@@ -436,7 +446,8 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
         ("Neliöhinta", fnum(p["hinta_eur_m2"], 0, "€/m²")
          + (" ※" if p.get("hinta_taso") == "kunta" else "")),
         ("Keskineliövuokra", fnum(p["vuokra_eur_m2"], 2, "€/m²/kk")
-         + (" ※" if p.get("vuokra_taso") == "kunta" else "")),
+         + (" ※" if p.get("vuokra_taso") == "kunta"
+            else " △" if p.get("vuokra_taso") == "malli" else "")),
         ("Asuntokauppoja", fnum(p["n_kaupat"])),
         ("Vuokrahavaintoja", fnum(p["n_vuokrat"])),
         ("Väkiluku", fnum(p["vakiluku"])),
@@ -454,6 +465,13 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
                 'peitetty, joten merkityissä luvuissa on käytetty koko kunnan '
                 'keskiarvoa. Se tasoittaa alueiden välisiä eroja – tulkitse '
                 'suuntaa-antavana.</p>')
+    elif p.get("taso") == "malli":
+        note = ('<p class="note">△ Postinumerotason vuokratietoa ei julkaista '
+                'tälle alueelle, joten keskineliövuokra ja siitä laskettu '
+                'tuotto ovat arvioita. Vuokra on mallinnettu alueen '
+                'toteutuneesta neliöhinnasta kunnan sisäisellä '
+                'hinta–vuokra-suhteella; neliöhinta ja kauppamäärä ovat aitoa '
+                'postinumerotason dataa. Tulkitse tuotto suuntaa-antavana.</p>')
 
     nb_html = ""
     if neighbours:
@@ -563,7 +581,8 @@ järjestetty bruttotuoton mukaan</p>
 {trs}
 </table>
 <p class="note">※ = luvussa on käytetty kuntatason keskiarvoa, koska
-postinumerotason tieto on peitetty.</p>
+postinumerotason tieto on peitetty. △ = vuokra ja tuotto on arvioitu alueen
+neliöhinnasta (postinumerotason vuokraa ei julkaista).</p>
 <p><a class="btn" href="/">Avaa koko kartta</a></p>"""
     bc = f' › {esc(kunta)}'
     return page(title, desc, f"{BASE_URL}/kunta/{kslug}/", body, bc)
