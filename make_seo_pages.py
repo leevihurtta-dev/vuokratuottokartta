@@ -119,6 +119,42 @@ def prose_summary(p, kunta_areas, national_median):
                 f"Neliöhinta on {fnum(h)} €/m² ja keskineliövuokra "
                 f"{fnum(v, 2)} €/m²/kk.")
 
+    # 2b) Alueen väestö ja tulotaso. Nämä ovat aidosti postinumerokohtaisia
+    # lukuja, joten kappale erottaa myös ne sivut, joilla tuotto perustuu
+    # kunnan keskiarvoon – poistaa lähes identtisen kaksoissisällön.
+    vak = p.get("vakiluku")
+    tulo = p.get("mediaanitulo")
+    if vak:
+        if vak < 500:
+            koko = "asukasluvultaan pieni"
+        elif vak < 2000:
+            koko = "melko pieni"
+        elif vak < 7000:
+            koko = "keskikokoinen"
+        else:
+            koko = "suuri"
+        vaklause = (f"{nimi} on {koko} postinumeroalue "
+                    f"({fnum(vak)} asukasta).")
+        tulot = sorted(a["mediaanitulo"] for a in kunta_areas
+                       if a.get("mediaanitulo"))
+        if tulo and len(tulot) >= 3:
+            tmed = tulot[len(tulot) // 2]
+            if tulo >= tmed * 1.12:
+                tulolause = (f" Talouksien mediaanitulo ({fnum(tulo)} €/v) on "
+                             f"kunnan {kunta} korkeimpia, mikä tukee "
+                             f"vuokrakysyntää.")
+            elif tulo <= tmed * 0.88:
+                tulolause = (f" Talouksien mediaanitulo ({fnum(tulo)} €/v) jää "
+                             f"kunnan {kunta} keskitason alapuolelle.")
+            else:
+                tulolause = (f" Talouksien mediaanitulo on {fnum(tulo)} €/v, "
+                             f"lähellä kunnan keskitasoa.")
+        elif tulo:
+            tulolause = f" Talouksien mediaanitulo on {fnum(tulo)} €/v."
+        else:
+            tulolause = ""
+        sentences.append(vaklause + tulolause)
+
     # 3) Suhde koko maahan.
     if b is not None and national_median is not None:
         if b >= national_median + 1:
@@ -636,8 +672,18 @@ def main():
         print("VAROITUS: data on demo-dataa – sivut generoidaan silti, "
               "mutta aja fetch_data.py ennen julkaisua.")
 
-    areas = [ft["properties"] for ft in fc.get("features", [])
-             if ft.get("properties", {}).get("brutto_pct") is not None]
+    def has_page(pr):
+        # Aluesivu tehdään vain, jos alueella on laskettu tuotto JA asukkaita.
+        # Nollaväestön postinumerot (postikeskukset, PL-koodit) eivät ole
+        # aitoja asuinalueita – ne jätetään pois, jottei synny ohutta,
+        # lähes identtistä kaksoissisältöä hakukoneille.
+        return pr.get("brutto_pct") is not None and bool(pr.get("vakiluku"))
+
+    all_props = [ft["properties"] for ft in fc.get("features", [])]
+    areas = [pr for pr in all_props if has_page(pr)]
+    skipped = sum(1 for pr in all_props
+                  if pr.get("brutto_pct") is not None
+                  and not pr.get("vakiluku"))
     if not areas:
         raise SystemExit("Datassa ei ole yhtään aluetta, jolla on tuotto.")
 
@@ -650,7 +696,7 @@ def main():
     for ft in fc.get("features", []):
         pr = ft.get("properties", {})
         code = pr.get("posti_alue")
-        if code is None or pr.get("brutto_pct") is None:
+        if code is None or not has_page(pr):
             continue
         c = _centroid(ft.get("geometry"))
         if c:
@@ -699,7 +745,8 @@ def main():
         f.write(f"User-agent: *\nAllow: /\nSitemap: {BASE_URL}/sitemap.xml\n")
 
     print(f"Generoitu: {len(areas)} aluesivua, {len(by_kunta)} kuntasivua, "
-          f"hakemisto, sitemap.xml ({len(urls)} osoitetta) ja robots.txt.")
+          f"hakemisto, sitemap.xml ({len(urls)} osoitetta) ja robots.txt. "
+          f"Ohitettu {skipped} nollaväestön postinumeroa.")
 
 
 if __name__ == "__main__":
