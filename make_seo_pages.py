@@ -215,6 +215,11 @@ def page(title, description, canonical, body, breadcrumb="", jsonld=None,
 <meta property="og:type" content="website">
 <meta property="og:url" content="{canonical}">
 <meta property="og:locale" content="fi_FI">
+<meta property="og:image" content="{BASE_URL}/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{BASE_URL}/og-image.png">
 {ld}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -348,9 +353,26 @@ varainsiirtoveroa. Nettotuoton oletuksia voi säätää
         vertailut.append(s2)
     vertailu = ""
     if vertailut:
+        # Kontekstilause: koko maan mediaania nostavat halpojen, usein
+        # supistuvien paikkakuntien korkeat bruttotuotot. Ilman tätä
+        # kasvukeskusten sivut näyttäisivät perusteettomasti "alle keskitason".
+        konteksti = ""
+        if national_median is not None:
+            if b >= national_median + 3:
+                konteksti = (" Näin korkea bruttotuotto liittyy tyypillisesti "
+                             "mataliin asuntohintoihin; suurin laskennallinen "
+                             "tuotto löytyy usein muuttotappiopaikkakunnilta, "
+                             "joilla arvonkehitys ja asunnon myytävyys ovat "
+                             "heikkoja – arvioi ne erikseen.")
+            elif b <= national_median - 2:
+                konteksti = (" Koko maan mediaania nostavat halpojen, usein "
+                             "väestöltään supistuvien paikkakuntien korkeat "
+                             "bruttotuotot, joten kasvukeskusten matalampi luku "
+                             "on odotettua eikä sellaisenaan kerro heikosta "
+                             "sijoituksesta.")
         vertailu = (f'<h2>Miten tuotto vertautuu?</h2><p>Alueen '
                     f'{fnum(b, 2)} %:n bruttovuokratuotto on '
-                    + " ja ".join(vertailut) + ".</p>")
+                    + " ja ".join(vertailut) + "." + konteksti + "</p>")
 
     # --- Takaisinmaksuaika ---
     vuodet = round(100 / b, 0) if b else None
@@ -661,6 +683,28 @@ render();
                 wide=True)
 
 
+def weighted_median(items, value_key="brutto_pct", weight_key="n_kaupat"):
+    """Painotettu mediaani. Kauppapainotus (n_kaupat) kuvaa 'tyypillistä
+    kaupan kohteena ollutta asuntoa' paremmin kuin polygonimediaani, jota
+    vinouttavat lukuisat halvat, vähän vaihdetut muuttotappioalueet, joilla
+    laskennallinen bruttotuotto on hyvin korkea. Jos painoja ei ole
+    lainkaan, palautuu tavallinen mediaani."""
+    data = sorted(((p[value_key], (p.get(weight_key) or 0)) for p in items
+                   if p.get(value_key) is not None), key=lambda t: t[0])
+    if not data:
+        return None
+    total = sum(w for _, w in data)
+    if total <= 0:
+        vals = [v for v, _ in data]
+        return vals[len(vals) // 2]
+    acc = 0.0
+    for val, w in data:
+        acc += w
+        if acc >= total / 2:
+            return val
+    return data[-1][0]
+
+
 def main():
     if not os.path.exists(DATA_FILE):
         raise SystemExit(f"{DATA_FILE} puuttuu – aja ensin fetch_data.py")
@@ -687,9 +731,11 @@ def main():
     if not areas:
         raise SystemExit("Datassa ei ole yhtään aluetta, jolla on tuotto.")
 
-    # Kansallinen mediaani sanallista yhteenvetoa varten.
-    bl = sorted(p["brutto_pct"] for p in areas)
-    national_median = bl[len(bl) // 2]
+    # Koko maan vertailuluku: kauppapainotettu mediaani. Tämä kuvaa
+    # tyypillistä kaupan kohteena ollutta asuntoa; raaka polygonimediaani
+    # vinoutuisi ylös lukuisten halpojen muuttotappioalueiden korkeista
+    # bruttotuotoista (joilla harva asunto oikeasti vaihtaa omistajaa).
+    national_median = weighted_median(areas, "brutto_pct", "n_kaupat")
 
     # Keskipisteet naapurihakua varten (kevyt bbox-keskikohta geometriasta).
     centroids = {}
