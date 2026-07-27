@@ -87,7 +87,7 @@ def probe(label, urls):
         print(f"  MUUTTUJA code={code!r} text={text!r} "
               f"arvoja={len(vals)} elim={var.get('elimination')}")
         # Aluemuuttuja on tärkein -> tulostetaan KAIKKI arvot
-        if len(vals) > 30 and (code or "").lower() in ("alue", "area"):
+        if len(vals) > 30 and (code or "").lower().startswith(("alue", "area")):
             print("    -- kaikki aluearvot (koodi | nimi) --")
             for v, t in zip(vals, txts):
                 print(f"      {v} | {t}")
@@ -113,23 +113,27 @@ def sample_query(label, urls):
             continue
         varmap = {v.get("code"): v for v in meta.get("variables", [])}
         area_var = next((c for c in varmap
-                         if (c or "").lower() in ("alue", "area")), None)
+                         if (c or "").lower().startswith(("alue", "area"))),
+                        None)
         time_var = next((c for c in varmap
-                         if (c or "").lower() in ("vuosi", "year", "time")),
-                        None)
+                         if (c or "").lower().startswith(
+                             ("timeperiod", "vuosi", "year", "time"))), None)
         info_var = next((c for c in varmap
-                         if (c or "").lower() in ("tiedot", "contentscode")),
-                        None)
+                         if (c or "").lower() == "contentscode"), None)
         if not (area_var and time_var and info_var):
             print(f"  muuttujia ei tunnistettu: {list(varmap)}")
             return
         area_vals = varmap[area_var]["values"]
         info_vals = varmap[info_var]["values"]
+        # Koko maa + Helsinki jos löytyy; indeksipisteluku (ensimmäinen tieto).
+        pick = [a for a in ("ksu", "091") if a in area_vals] or [area_vals[0]]
+        # Suositaan 2015=100 -indeksiä, jos se on tarjolla (pitkä sarja).
+        info = "ind15" if "ind15" in info_vals else info_vals[0]
         q = {"query": [
             {"code": area_var, "selection":
-                {"filter": "item", "values": [area_vals[0]]}},
+                {"filter": "item", "values": pick}},
             {"code": info_var, "selection":
-                {"filter": "item", "values": [info_vals[0]]}},
+                {"filter": "item", "values": [info]}},
         ], "response": {"format": "json-stat2"}}
         try:
             res = json.loads(_request(u, data=q).decode("utf-8"))
@@ -137,12 +141,68 @@ def sample_query(label, urls):
             dim = res.get("dimension", {})
             years = list(dim.get(time_var, {}).get("category", {})
                          .get("index", {}))
-            print(f"  OK. Alue={area_vals[0]!r} Tieto={info_vals[0]!r}")
-            print(f"  Vuodet: {years}")
-            print(f"  Arvot:  {vals}")
+            areas = list(dim.get(area_var, {}).get("category", {})
+                         .get("label", {}).items())
+            print(f"  OK. Alueet={areas} Tieto={info!r}")
+            print(f"  Vuosia: {len(years)} ({years[0]}…{years[-1]})"
+                  if years else "  ei vuosia")
+            print(f"  Arvoja: {len(vals)}")
+            print(f"  Ensimmäiset 12: {vals[:12]}")
+            print(f"  Viimeiset 12:   {vals[-12:]}")
         except Exception as e:  # noqa: BLE001
             print(f"  koehaku epäonnistui: {e}")
         return
+
+
+def map_kunnat(urls):
+    """Vertaa sivuston kuntia indeksitaulukon aluearvoihin ja kertoo, mille
+    kunnille löytyy oma indeksialue ja mille ei (jolloin tarvitaan maakunta)."""
+    print("=" * 70)
+    print("KUNTAKARTOITUS: sivuston kunnat vs. indeksialueet")
+    print("=" * 70)
+    meta = None
+    for u in urls:
+        try:
+            meta = json.loads(_request(u).decode("utf-8"))
+            break
+        except Exception:  # noqa: BLE001
+            continue
+    if not meta:
+        print("  metatietoja ei saatu\n")
+        return
+    area_var = next((v for v in meta.get("variables", [])
+                     if (v.get("code") or "").lower().startswith("alue")), None)
+    if not area_var:
+        print("  aluemuuttujaa ei löytynyt\n")
+        return
+    names = {}
+    for code, text in zip(area_var["values"], area_var["valueTexts"]):
+        names[text.strip().lower()] = code
+
+    try:
+        with open("postal_yields.geojson", encoding="utf-8") as f:
+            fc = json.load(f)
+    except Exception as e:  # noqa: BLE001
+        print(f"  geojsonia ei voitu lukea: {e}\n")
+        return
+    kunnat = sorted({(ft.get("properties") or {}).get("kunta")
+                     for ft in fc.get("features", [])
+                     if (ft.get("properties") or {}).get("kunta")})
+    hit, miss = [], []
+    for k in kunnat:
+        code = names.get(k.strip().lower())
+        (hit if code else miss).append((k, code))
+    print(f"  Sivustolla kuntia: {len(kunnat)}")
+    print(f"  Omalla indeksialueella: {len(hit)}")
+    for k, c in hit:
+        print(f"    {c} | {k}")
+    print(f"\n  ILMAN omaa indeksialuetta (tarvitsevat maakunnan): {len(miss)}")
+    print("    " + ", ".join(k for k, _ in miss))
+    print("\n  Maakunta-aluekoodit taulukossa:")
+    for code, text in zip(area_var["values"], area_var["valueTexts"]):
+        if str(code).startswith("MK"):
+            print(f"    {code} | {text}")
+    print()
 
 
 def main():
@@ -155,6 +215,10 @@ def main():
             print()
         except Exception as e:  # noqa: BLE001
             print(f"  !! {label} kaatui: {e}\n")
+    try:
+        map_kunnat(CANDIDATES["13mz"])
+    except Exception as e:  # noqa: BLE001
+        print(f"  !! kuntakartoitus kaatui: {e}\n")
     print("Valmis. Kopioi tämä loki keskusteluun.")
 
 
