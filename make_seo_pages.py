@@ -241,7 +241,8 @@ def page(title, description, canonical, body, breadcrumb="", jsonld=None,
 Luvut ovat Tilastokeskuksen avoimesta datasta laskettuja alueellisia
 keskiarvoja (CC BY 4.0) eivätkä ole sijoitusneuvontaa. Bruttotuotto =
 keskineliövuokra × 12 ÷ neliöhinta. Yksittäisten asuntojen tuotot voivat
-poiketa merkittävästi alueen keskiarvosta.
+poiketa merkittävästi alueen keskiarvosta.<br>
+<a href="/tietosuoja/">Tietosuojaseloste</a> – ei evästeitä, ei henkilötietoja.
 </footer>
 </main>
 </body>
@@ -771,7 +772,7 @@ def main():
     for d in OUT_DIRS:
         shutil.rmtree(d, ignore_errors=True)
 
-    urls = [f"{BASE_URL}/", f"{BASE_URL}/alueet/"]
+    urls = [f"{BASE_URL}/", f"{BASE_URL}/alueet/", f"{BASE_URL}/tietosuoja/"]
     by_kunta = {}
     for p in areas:
         by_kunta.setdefault(str(p.get("kunta") or "Muu"), []).append(p)
