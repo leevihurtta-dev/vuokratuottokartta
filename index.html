@@ -1,142 +1,194 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tietosuojaseloste – Vuokratuottokartta</title>
-<meta name="description" content="Vuokratuottokartta ei käytä evästeitä, ei kerää henkilötietoja eikä vaadi kirjautumista. Lue mitä tietoja käsitellään ja mitä ei.">
-<link rel="canonical" href="https://vuokratuottokartta.fi/tietosuoja/">
-<meta name="robots" content="index,follow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vuokratuottokartta – vanhojen osakeasuntojen bruttovuokratuotto postinumeroittain</title>
+<meta name="description" content="Vuokratuotto koko Suomesta postinumeroittain kartalla. Vanhojen osakeasuntojen brutto- ja nettovuokratuotto, neliöhinnat ja vuokrat postinumeroalueittain. Data: Tilastokeskus (CC BY 4.0).">
+<link rel="canonical" href="https://vuokratuottokartta.fi/">
+<meta property="og:title" content="Vuokratuottokartta – vuokratuotto koko Suomesta postinumeroittain">
+<meta property="og:description" content="Selaa asuntojen brutto- ja nettovuokratuottoa postinumeroalueittain kartalla. Virallista Tilastokeskuksen dataa, ilmainen.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Tietosuojaseloste – Vuokratuottokartta">
-<meta property="og:description" content="Ei evästeitä, ei henkilötietoja, ei kirjautumista.">
-<meta property="og:url" content="https://vuokratuottokartta.fi/tietosuoja/">
+<meta property="og:url" content="https://vuokratuottokartta.fi/">
 <meta property="og:locale" content="fi_FI">
 <meta property="og:image" content="https://vuokratuottokartta.fi/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Vuokratuottokartta – Suomen vuokratuotot postinumeroittain kartalla">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://vuokratuottokartta.fi/og-image.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"Vuokratuottokartta","url":"https://vuokratuottokartta.fi/","applicationCategory":"FinanceApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"description":"Interaktiivinen kartta, joka näyttää vanhojen osakeasuntojen vuokratuoton postinumeroalueittain koko Suomessa. Data: Tilastokeskus.","inLanguage":"fi","isAccessibleForFree":true}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-<style>
-:root{--paper:#f6f7f4;--ink:#1d2733;--soft:#55606c;--petrol:#0e5f57;
---line:#d8dcd6;--warn-bg:#fdf3dd;--warn:#8a5a12}
-*{box-sizing:border-box}body{margin:0;font-family:"Space Grotesk",system-ui,
-sans-serif;background:var(--paper);color:var(--ink);line-height:1.55}
-main{max-width:760px;margin:0 auto;padding:20px 16px 40px}
-a{color:var(--petrol)}h1{font-size:26px;line-height:1.2;margin:8px 0 2px}
-h2{font-size:18px;margin:26px 0 6px}
-.crumb{font-size:13px;color:var(--soft)}
-.lead{color:var(--soft);margin:2px 0 18px}
-table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px}
-th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);
-vertical-align:top}
-th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;
-color:var(--soft)}
-.hi{background:#e8f0ec;border-left:3px solid var(--petrol);border-radius:8px;
-padding:12px 14px;margin:14px 0}
-.hi p{margin:0}
-ul{margin:8px 0;padding-left:20px}li{margin:4px 0}
-footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
-font-size:12.5px;color:var(--soft)}
-.upd{font-size:12.5px;color:var(--soft)}
-.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
 </head>
 <body>
-<main>
-<p class="crumb"><a href="/">Vuokratuottokartta</a> › Tietosuoja</p>
-<h1>Tietosuojaseloste</h1>
-<p class="lead">Lyhyt seloste, koska kerättävää on vähän.</p>
 
-<div class="hi">
-<p><strong>Tiivistelmä:</strong> Vuokratuottokartta ei käytä evästeitä, ei
-vaadi kirjautumista eikä kerää sinusta henkilötietoja. Siksi sivustolla ei
-ole evästebanneria – sellaiselle ei ole tarvetta. Kaikki kartan tiedot ovat
-Tilastokeskuksen avointa, alueellista tilastodataa, ei tietoa yksittäisistä
-ihmisistä tai asunnoista.</p>
+<div id="map" aria-label="Suomen kartta postinumeroalueiden vuokratuotoista"></div>
+
+<div id="loading" role="status">
+  <div class="spinner" aria-hidden="true"></div>
+  <p>Ladataan tuottodataa…</p>
 </div>
 
-<h2>Rekisterinpitäjä</h2>
-<p>Vuokratuottokartta on yksityishenkilön ylläpitämä harrasteprojekti.
-Tietosuojaa koskevissa kysymyksissä voit ottaa yhteyttä sähköpostitse:
-leevi.hurtta (at) gmail.com</p>
-
-<h2>Mitä ei kerätä</h2>
-<ul>
-  <li>Ei evästeitä eikä muuta selaimeen tallennettavaa tunnistetta
-      (localStorage, sessionStorage).</li>
-  <li>Ei käyttäjätilejä, ei kirjautumista, ei lomakkeita.</li>
-  <li>Ei nimeä, sähköpostia, sijaintia eikä muita sinuun yhdistettäviä
-      tietoja.</li>
-  <li>Ei mainosverkkoja eikä mainostajien seurantaa.</li>
-  <li>Ei tietojen myyntiä tai luovutusta markkinointitarkoituksiin.</li>
-</ul>
-
-<h2>Kävijämäärien seuranta</h2>
-<p>Sivuston käyttöä seurataan <a href="https://www.goatcounter.com/"
-rel="noopener nofollow" target="_blank">GoatCounter</a>-palvelulla, jotta
-tiedän kuinka moni sivustolla käy ja mitkä sivut ovat suosittuja. GoatCounter
-on valittu nimenomaan siksi, että se toimii ilman evästeitä: se ei aseta
-tunnistetta selaimeesi eikä tallenna IP-osoitettasi. Kerättävä tieto on
-tilastollista ja koostettua – esimerkiksi sivun osoite, karkea maa,
-selaintyyppi ja mistä linkistä saavuit. Näistä ei muodostu käyttäjäkohtaista
-profiilia eikä yksittäistä kävijää voi tunnistaa.</p>
-
-<h2>Palvelut, joihin selaimesi ottaa yhteyden</h2>
-<p>Sivusto koostuu staattisista tiedostoista, mutta osa sisällöstä ladataan
-muilta palveluntarjoajilta. Tällöin selaimesi ottaa niihin teknisen yhteyden,
-jolloin niille välittyy IP-osoitteesi ja selaimen perustiedot – kuten aina
-verkkosivua ladattaessa. Nämä ovat teknisesti välttämättömiä sivuston
-toiminnalle.</p>
-<div class="table-wrap">
-<table>
-<tr><th>Palvelu</th><th>Käyttötarkoitus</th></tr>
-<tr><td>GitHub Pages</td><td>Sivuston tekninen ylläpito (hosting)</td></tr>
-<tr><td>CARTO (basemaps.cartocdn.com)</td><td>Kartan pohjakartta-aineisto</td></tr>
-<tr><td>unpkg.com</td><td>Karttaohjelmiston (MapLibre GL JS) jakelu</td></tr>
-<tr><td>Google Fonts</td><td>Sivuston kirjasintyypit</td></tr>
-<tr><td>GoatCounter (gc.zgo.at)</td><td>Kävijämäärien laskenta</td></tr>
-</table>
+<div id="demo-banner" hidden>
+  <strong>Demo-data.</strong> Kartalla näkyy synteettinen esimerkkiaineisto.
+  Aja <code>python fetch_data.py</code> hakeaksesi oikeat tilastot koko Suomesta.
 </div>
-<p>Palveluntarjoajat voivat käsitellä yhteyspyyntöjä omien
-tietosuojakäytäntöjensä mukaisesti, ja osa niistä sijaitsee EU:n
-ulkopuolella. Palvelinlokeihin tallentuu tyypillisesti IP-osoite lyhyeksi
-ajaksi teknisistä ja tietoturvasyistä. En itse käsittele näitä lokeja enkä
-saa niistä tietoa.</p>
 
-<h2>Kartan sisältämä data</h2>
-<p>Kartan luvut ovat Tilastokeskuksen avointa dataa (StatFin ja Paavo,
-lisenssi CC BY 4.0). Ne ovat postinumero- ja kuntatason keskiarvoja, ja
-Tilastokeskus peittää pienten alueiden tiedot jo lähteessä. Kartalla ei siis
-esitetä tietoja yksittäisistä asunnoista, kaupoista tai henkilöistä.</p>
+<header id="brand">
+  <h1>Vuokratuotto&shy;kartta</h1>
+  <p id="brand-kausi">Vanhat osakeasunnot · postinumeroittain</p>
+  <a id="list-link" href="/alueet/">☰ Selaa listana</a>
+</header>
 
-<h2>Ulkoiset linkit</h2>
-<p>Sivustolla voi olla linkkejä muille sivustoille. Ne toimivat omilla
-tietosuojaehdoillaan, eikä tämä seloste koske niitä. Mahdolliset
-kaupalliset kumppanilinkit merkitään sivustolla selkeästi.</p>
+<button id="panel-toggle" type="button" aria-expanded="false" aria-controls="panel">
+  Haku ja asetukset
+</button>
 
-<h2>Oikeutesi</h2>
-<p>Tietosuoja-asetus antaa sinulle oikeuden tarkastaa, oikaista ja poistaa
-itseäsi koskevat henkilötiedot. Koska sivusto ei kerää eikä tallenna
-henkilötietoja, tällaisia tietoja ei ole olemassa poistettavaksi tai
-tarkastettavaksi. Voit silti ottaa yhteyttä yllä olevaan osoitteeseen, jos
-sinulla on kysyttävää. Halutessasi voit tehdä valituksen
-tietosuojavaltuutetun toimistolle (tietosuoja.fi).</p>
+<aside id="panel" aria-label="Haku, suodattimet ja laskennan oletukset">
+  <div class="panel-head">
+    <h2>Haku ja asetukset</h2>
+    <button id="panel-close" type="button" aria-label="Sulje paneeli">×</button>
+  </div>
 
-<h2>Muutokset</h2>
-<p>Jos sivustolle lisätään ominaisuuksia, jotka vaikuttavat tietojen
-käsittelyyn, tämä seloste päivitetään. Merkittävistä muutoksista kerrotaan
-sivustolla.</p>
+  <section>
+    <label class="field-label" for="search">Postinumero tai paikannimi</label>
+    <div class="search-row">
+      <input id="search" type="search" list="search-options"
+             placeholder="esim. 00120 tai Punavuori" autocomplete="off">
+      <button id="search-btn" type="button">Etsi</button>
+    </div>
+    <datalist id="search-options"></datalist>
+    <p id="search-msg" class="hint" role="status"></p>
+  </section>
 
-<p class="upd">Päivitetty 27.7.2026</p>
+  <section>
+    <h3>Värit</h3>
+    <div class="seg" role="group" aria-label="Väritysperuste">
+      <button type="button" class="seg-btn active" data-mode="brutto">Bruttotuotto</button>
+      <button type="button" class="seg-btn" data-mode="netto">Nettotuotto</button>
+    </div>
+  </section>
 
-<footer>
-<a href="/">← Takaisin kartalle</a> · Data: Tilastokeskus, StatFin &amp; Paavo
-(CC BY 4.0). Sivusto ei tarjoa sijoitusneuvontaa.
-</footer>
-</main>
+  <section>
+    <h3>Suodattimet</h3>
+    <label class="slider-label" for="f-brutto">
+      Bruttotuotto vähintään <output id="f-brutto-out">0,0&nbsp;%</output>
+    </label>
+    <input id="f-brutto" type="range" min="0" max="15" step="0.5" value="0">
+    <label class="slider-label" for="f-kaupat">
+      Kauppoja vähintään <output id="f-kaupat-out">0</output>
+    </label>
+    <input id="f-kaupat" type="range" min="0" max="150" step="5" value="0">
+    <label class="check-row">
+      <input id="f-kunta" type="checkbox" checked>
+      <span>Täydennä peitetyt alueet kuntatason keskiarvolla</span>
+    </label>
+    <p class="hint">Jos postinumerotason tieto on peitetty, käytetään saman
+    kunnan keskiarvoa (merkitty popupissa). Kauppasuodatin koskee vain
+    alueita, joilla on postinumerotason hintatieto. Suodatetut ja kokonaan
+    ilman dataa jäävät alueet näkyvät harmaina.</p>
+  </section>
+
+  <section>
+    <h3>Nettotuoton oletukset</h3>
+    <label class="slider-label" for="a-hoito">
+      Hoitovastike <output id="a-hoito-out">4,5&nbsp;€/m²/kk</output>
+    </label>
+    <input id="a-hoito" type="range" min="0" max="10" step="0.1" value="4.5">
+    <label class="slider-label" for="a-vaja">
+      Vajaakäyttöaste <output id="a-vaja-out">5&nbsp;%</output>
+    </label>
+    <input id="a-vaja" type="range" min="0" max="20" step="1" value="5">
+    <label class="slider-label" for="a-vero">
+      Varainsiirtovero <output id="a-vero-out">1,5&nbsp;%</output>
+    </label>
+    <input id="a-vero" type="range" min="0" max="4" step="0.5" value="1.5">
+    <label class="check-row">
+      <input id="a-tax" type="checkbox">
+      <span>Vähennä pääomatulovero</span>
+      <select id="a-tax-rate" aria-label="Pääomatuloveroprosentti" disabled>
+        <option value="30" selected>30&nbsp;%</option>
+        <option value="34">34&nbsp;%</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="panel-foot">
+    <button id="info-open" type="button" class="link-btn">Miten luvut lasketaan ja mitä ne eivät kerro</button>
+    <p class="hint">Data: Tilastokeskus, StatFin &amp; Paavo (CC&nbsp;BY&nbsp;4.0)</p>
+  </section>
+</aside>
+
+<div id="legend" aria-label="Värien selite">
+  <p id="legend-title">Bruttovuokratuotto</p>
+  <ul id="legend-items"></ul>
+</div>
+
+<!-- Näkyvä, avattava sisältöosio: kuvailee palvelun ja vastaa yleisimpiin
+     kysymyksiin. Tämä on aidosti käyttäjälle luettavaa sisältöä (ei piiloteksti)
+     ja auttaa myös hakukoneita ymmärtämään sivun aiheen. -->
+<details id="about">
+  <summary>Tietoa vuokratuotoista</summary>
+  <div class="about-body">
+    <h2>Vuokratuotto koko Suomesta postinumeroittain</h2>
+    <p>Vuokratuottokartta näyttää vanhojen osakeasuntojen brutto- ja
+    nettovuokratuoton postinumeroalueittain koko Suomessa. Kartalta näet yhdellä
+    silmäyksellä, millä alueilla asuntosijoittamisen laskennallinen vuokratuotto
+    on korkein ja millä matalin. Klikkaamalla aluetta saat esiin neliöhinnan,
+    keskineliövuokran, lasketun brutto- ja nettotuoton sekä taustatiedot kuten
+    väkiluvun ja alueen mediaanitulon. Kaikki luvut perustuvat Tilastokeskuksen
+    viralliseen avoimeen dataan – toteutuneisiin kauppoihin, ei pyyntihintoihin.</p>
+
+    <h2>Mikä on hyvä vuokratuotto?</h2>
+    <p>Vuokratuotto vaihtelee alueittain merkittävästi. Kasvukeskusten
+    keskustoissa bruttovuokratuotto on tyypillisesti noin 3–5 %, kun taas
+    pienemmillä paikkakunnilla ja kaupunkien reuna-alueilla luvut ovat usein
+    korkeampia, koska asuntojen hinnat ovat matalampia suhteessa vuokriin.
+    Korkea tuotto ei kuitenkaan yksin kerro hyvästä sijoituksesta: myös
+    vuokrausaste, arvonkehitys, alueen väestökehitys ja riskit vaikuttavat.
+    Kartta auttaa nimenomaan alueiden vertailussa keskenään.</p>
+
+    <h2>Miten vuokratuotto lasketaan?</h2>
+    <p>Bruttovuokratuotto lasketaan jakamalla vuotuinen vuokra asunnon
+    velattomalla hinnalla: keskineliövuokra × 12 ÷ neliöhinta × 100.
+    Nettovuokratuotossa huomioidaan lisäksi hoitovastike, arvioitu vajaakäyttö
+    ja varainsiirtovero. Tällä sivulla nettotuoton oletukset voi säätää itse.
+    Koska sekä hinta että vuokra ovat neliöperusteisia, laskenta ei vaadi
+    oletusta asunnon koosta.</p>
+
+    <p class="about-links">Selaa alueita listana:
+    <a href="/alueet/">kaikki kunnat ja postinumeroalueet</a>.
+    Data: Tilastokeskus, StatFin &amp; Paavo (CC&nbsp;BY&nbsp;4.0).</p>
+  </div>
+</details>
+
+<dialog id="info">
+  <h2>Miten luvut lasketaan</h2>
+  <p><strong>Bruttovuokratuotto</strong> = keskineliövuokra €/m²/kk × 12 ÷ velaton neliöhinta €/m² × 100. Koska sekä hinta että vuokra ovat neliöperusteisia, asuntokokoa ei tarvitse olettaa.</p>
+  <p><strong>Nettovuokratuotto</strong> (yksinkertaistettu) = (vuokra − hoitovastike) × 12 × (1 − vajaakäyttöaste) ÷ (neliöhinta × (1 + varainsiirtovero)) × 100. Oletuksia voi säätää paneelista.</p>
+  <h2>Mitä luvut eivät kerro</h2>
+  <ul>
+    <li>Hintadata on jaoteltu <em>talotyypin</em> (kerros-/rivitalo) ja vuokradata <em>huoneluvun</em> mukaan – täydellistä vastaavuutta ei ole. Kartta käyttää molempien "yhteensä"-tasoa; yksiöiden todellinen tuotto on tyypillisesti tätä korkeampi.</li>
+    <li>Luvut ovat koko vuoden keskiarvoja (neljännestasolla data olisi liian harvaa). Postinumeroalueen keskiarvot kätkevät suuren hajonnan. Työkalu on suuntaa-antava, ei kohdekohtainen arvio.</li>
+    <li>Vuokratieto on peitetty, jos havaintoja on alle 20 tai vuokrataloyhtiöiden osuus alueella on suuri. Peitetyt hinnat ja vuokrat täydennetään oletuksena <em>kuntatason</em> keskiarvolla (merkitty popupissa ja kytkettävissä pois suodattimista) – kuntakeskiarvo tasoittaa alueiden välisiä eroja, joten tulkitse näitä alueita varoen.</li>
+    <li>Kauppojen ja vuokrahavaintojen lukumäärä popupissa kertoo luvun luotettavuudesta: pieni otos, epävarma keskiarvo.</li>
+    <li>Netto ei sisällä mm. remontteja, rahoitusvastiketta, rahoituskuluja eikä arvonmuutosta.</li>
+  </ul>
+  <p class="hint">Lähteet: Tilastokeskus – vanhojen osakeasuntojen hinnat vuositasolla (ashi), vapaarahoitteiset vuokrat (asvu, vuoden neljännekset yhdistettynä), Paavo-postinumeroalueet. Lisenssi CC&nbsp;BY&nbsp;4.0.</p>
+  <p class="hint">Sivusto ei käytä evästeitä eikä kerää henkilötietoja – <a href="/tietosuoja/">tietosuojaseloste</a>.</p>
+  <form method="dialog"><button class="btn-primary">Selvä</button></form>
+</dialog>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js"></script>
+<!-- Kävijäseuranta (GoatCounter, ei evästeitä, ei henkilötietoja) -->
+<script data-goatcounter="https://lerpou.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
