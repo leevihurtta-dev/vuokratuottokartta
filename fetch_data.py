@@ -104,6 +104,94 @@ RENT_MUNI_TABLE_CANDIDATES = [
 ]
 
 # pno_tilasto = rantaviivalla leikatut alueet + Paavo-tilastot valmiiksi mukana.
+# Laatuvakioitu hintaindeksi (2015=100), vuosittain 1988-. Tätä käytetään
+# hintakehitykseen, koska Tilastokeskus huomauttaa erikseen, ettei
+# neliöhintoja (13mu) tule käyttää hintamuutoksen laskemiseen: ne ovat
+# painottamattomia keskiarvoja, joita heiluttaa myytyjen asuntojen
+# koostumus. Indeksi ei ulotu postinumerotasolle, vaan hienoin taso on
+# suuri kaupunki / maakunta (aluejako alue_43, 87 aluetta).
+PRICE_INDEX_TABLE_CANDIDATES = [
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/13mz.px",
+    "https://pxdata.stat.fi/PxWeb/api/v1/fi/StatFin/ashi/statfin_ashi_pxt_13mz.px",
+]
+INDEX_CONTENT_CODE = "ind15"      # Indeksi (2015=100)
+INDEX_FIRST_YEAR = 2010           # näytettävän sarjan alku
+
+# Kunta -> indeksialue. 27 kunnalla on oma alueensa; muut käyttävät
+# maakuntaa. Espoo ja Kauniainen ovat indeksissä yhtenä alueena (049).
+KUNTA_INDEX_AREA = {
+    # --- oma indeksialue ---
+    "Helsinki": "091", "Espoo": "049", "Espoo-Kauniainen": "049",
+    "Kauniainen": "049", "Vantaa": "092", "Porvoo": "638",
+    "Hyvinkää": "106", "Järvenpää": "186", "Kerava": "245",
+    "Turku": "853", "Pori": "609", "Rauma": "684",
+    "Hämeenlinna": "109", "Riihimäki": "694", "Tampere": "837",
+    "Lahti": "398", "Kotka": "285", "Kouvola": "286",
+    "Lappeenranta": "405", "Mikkeli": "491", "Kuopio": "297",
+    "Joensuu": "167", "Jyväskylä": "179", "Seinäjoki": "743",
+    "Vaasa": "905", "Kokkola": "272", "Oulu": "564",
+    "Kajaani": "205", "Rovaniemi": "698",
+    # --- Uusimaa ---
+    "Hanko": "MK01", "Karkkila": "MK01", "Kirkkonummi": "MK01",
+    "Lohja": "MK01", "Loviisa": "MK01", "Mäntsälä": "MK01",
+    "Nurmijärvi": "MK01", "Raasepori": "MK01", "Sipoo": "MK01",
+    "Tuusula": "MK01", "Vihti": "MK01",
+    # --- Varsinais-Suomi ---
+    "Kaarina": "MK02", "Laitila": "MK02", "Lieto": "MK02",
+    "Loimaa": "MK02", "Naantali": "MK02", "Paimio": "MK02",
+    "Parainen": "MK02", "Raisio": "MK02", "Salo": "MK02",
+    "Somero": "MK02", "Uusikaupunki": "MK02",
+    # --- Satakunta ---
+    "Harjavalta": "MK04", "Huittinen": "MK04", "Kankaanpää": "MK04",
+    "Kokemäki": "MK04", "Nakkila": "MK04", "Ulvila": "MK04",
+    # --- Kanta-Häme ---
+    "Forssa": "MK05", "Janakkala": "MK05",
+    # --- Pirkanmaa ---
+    "Akaa": "MK06", "Ikaalinen": "MK06", "Kangasala": "MK06",
+    "Lempäälä": "MK06", "Nokia": "MK06", "Orivesi": "MK06",
+    "Parkano": "MK06", "Pirkkala": "MK06", "Sastamala": "MK06",
+    "Valkeakoski": "MK06", "Ylöjärvi": "MK06",
+    # --- Päijät-Häme ---
+    "Asikkala": "MK07", "Heinola": "MK07", "Hollola": "MK07",
+    "Iitti": "MK07", "Kärkölä": "MK07", "Orimattila": "MK07",
+    # --- Kymenlaakso ---
+    "Hamina": "MK08",
+    # --- Etelä-Karjala ---
+    "Imatra": "MK09",
+    # --- Etelä-Savo ---
+    "Juva": "MK10", "Kangasniemi": "MK10", "Mäntyharju": "MK10",
+    "Pieksämäki": "MK10", "Savonlinna": "MK10",
+    # --- Pohjois-Savo ---
+    "Iisalmi": "MK11", "Kiuruvesi": "MK11", "Lapinlahti": "MK11",
+    "Leppävirta": "MK11", "Siilinjärvi": "MK11", "Suonenjoki": "MK11",
+    "Varkaus": "MK11",
+    # --- Pohjois-Karjala ---
+    "Kitee": "MK12", "Lieksa": "MK12", "Liperi": "MK12",
+    "Nurmes": "MK12", "Outokumpu": "MK12",
+    # --- Keski-Suomi ---
+    "Jämsä": "MK13", "Karstula": "MK13", "Keuruu": "MK13",
+    "Laukaa": "MK13", "Muurame": "MK13", "Saarijärvi": "MK13",
+    "Viitasaari": "MK13", "Äänekoski": "MK13",
+    # --- Etelä-Pohjanmaa ---
+    "Alajärvi": "MK14", "Alavus": "MK14", "Ilmajoki": "MK14",
+    "Kauhajoki": "MK14", "Kauhava": "MK14", "Kurikka": "MK14",
+    "Lapua": "MK14", "Ähtäri": "MK14",
+    # --- Pohjanmaa ---
+    "Laihia": "MK15", "Mustasaari": "MK15", "Pietarsaari": "MK15",
+    # --- Keski-Pohjanmaa ---
+    "Kannus": "MK16",
+    # --- Pohjois-Pohjanmaa ---
+    "Haapajärvi": "MK17", "Haapavesi": "MK17", "Ii": "MK17",
+    "Kalajoki": "MK17", "Kempele": "MK17", "Kuusamo": "MK17",
+    "Muhos": "MK17", "Nivala": "MK17", "Oulainen": "MK17",
+    "Pudasjärvi": "MK17", "Raahe": "MK17", "Ylivieska": "MK17",
+    # --- Kainuu ---
+    "Kuhmo": "MK18", "Sotkamo": "MK18",
+    # --- Lappi ---
+    "Kemi": "MK19", "Keminmaa": "MK19", "Sodankylä": "MK19",
+    "Tornio": "MK19",
+}
+
 WFS_URL = (
     "https://geo.stat.fi/geoserver/postialue/wfs"
     "?service=WFS&version=2.0.0&request=GetFeature"
@@ -726,6 +814,149 @@ def netto_pct(hinta, vuokra,
     return None
 
 
+def fetch_price_index(kunnat, out_path="history.json"):
+    """Hakee laatuvakioidun hintaindeksin (2015=100) niille indeksialueille,
+    joita sivuston kunnat tarvitsevat, ja kirjoittaa history.json-tiedoston.
+
+    Indeksiä EI ole postinumerotasolla – hienoin taso on suuri kaupunki tai
+    maakunta. Sarja kertoo siis seudun hintakehityksen, ei yksittäisen
+    postinumeron. Tämä merkitään sivuilla selvästi.
+
+    Palauttaa haettujen alueiden määrän. Ei ole kriittinen: jos haku
+    epäonnistuu, palautetaan 0 eikä muu ajo häiriinny.
+    """
+    tarvitut = sorted({KUNTA_INDEX_AREA[k] for k in kunnat
+                       if k in KUNTA_INDEX_AREA})
+    if not tarvitut:
+        print("[indeksi] Ei kartoitettuja kuntia – ohitetaan.")
+        return 0
+
+    meta = None
+    url = None
+    for u in PRICE_INDEX_TABLE_CANDIDATES:
+        try:
+            meta = get_json(u)
+            url = u
+            break
+        except Exception as e:  # noqa: BLE001
+            print(f"[indeksi] ei toiminut {u}: {e}")
+    if not meta:
+        print("[indeksi] Hintaindeksitaulukkoa ei saatu – ohitetaan.")
+        return 0
+
+    # Muuttujien koodit luetaan metatiedoista (ne voivat muuttua).
+    vars_ = {v.get("code"): v for v in meta.get("variables", [])}
+
+    def find(*prefixes, exact=None):
+        for c in vars_:
+            lc = (c or "").lower()
+            if exact and lc == exact:
+                return c
+            if prefixes and lc.startswith(prefixes):
+                return c
+        return None
+
+    v_time = find("timeperiod", "vuosi", "year")
+    v_area = find("alue", "area")
+    v_info = find(exact="contentscode")
+    v_talo = find("talotyyppi")
+    v_huone = find("huoneluku")
+    if not (v_time and v_area and v_info):
+        print(f"[indeksi] Muuttujia ei tunnistettu: {list(vars_)} – ohitetaan.")
+        return 0
+
+    years_all = [y for y in vars_[v_time]["values"]
+                 if str(y).isdigit() and int(y) >= INDEX_FIRST_YEAR]
+    if not years_all:
+        print("[indeksi] Vuosia ei löytynyt – ohitetaan.")
+        return 0
+    info_vals = vars_[v_info]["values"]
+    info = INDEX_CONTENT_CODE if INDEX_CONTENT_CODE in info_vals else info_vals[0]
+    area_vals = set(vars_[v_area]["values"])
+    haettavat = [a for a in tarvitut if a in area_vals]
+    puuttuvat = [a for a in tarvitut if a not in area_vals]
+    if puuttuvat:
+        print(f"[indeksi] Aluekoodeja ei löydy taulukosta: {puuttuvat}")
+    if not haettavat:
+        print("[indeksi] Yhtään aluetta ei löytynyt – ohitetaan.")
+        return 0
+
+    query = [
+        {"code": v_time, "selection":
+            {"filter": "item", "values": years_all}},
+        {"code": v_area, "selection":
+            {"filter": "item", "values": haettavat}},
+        {"code": v_info, "selection": {"filter": "item", "values": [info]}},
+    ]
+    # Talotyypit ja huoneluvut yhteensä, jos muuttujat ovat olemassa.
+    if v_talo and "0" in vars_[v_talo]["values"]:
+        query.append({"code": v_talo,
+                      "selection": {"filter": "item", "values": ["0"]}})
+    if v_huone and "00" in vars_[v_huone]["values"]:
+        query.append({"code": v_huone,
+                      "selection": {"filter": "item", "values": ["00"]}})
+
+    print(f"[indeksi] Haetaan {len(haettavat)} aluetta, "
+          f"{len(years_all)} vuotta ({years_all[0]}–{years_all[-1]})…")
+    try:
+        res = post_json(url, {"query": query,
+                              "response": {"format": "json-stat2"}})
+    except Exception as e:  # noqa: BLE001
+        print(f"[indeksi] Haku epäonnistui: {e} – ohitetaan.")
+        return 0
+
+    # json-stat2: puretaan arvot dimensioiden järjestyksen mukaan.
+    ids = res.get("id") or []
+    sizes = res.get("size") or []
+    values = res.get("value") or []
+    dim = res.get("dimension") or {}
+    idx = {}
+    for d in ids:
+        cat = (dim.get(d) or {}).get("category") or {}
+        idx[d] = cat.get("index") or {}
+    labels = ((dim.get(v_area) or {}).get("category") or {}).get("label") or {}
+
+    strides = {}
+    acc = 1
+    for d, s in zip(reversed(ids), reversed(sizes)):
+        strides[d] = acc
+        acc *= s
+
+    def value_at(**pos):
+        off = 0
+        for d, key in pos.items():
+            i = idx.get(d, {}).get(key)
+            if i is None:
+                return None
+            off += i * strides.get(d, 0)
+        return values[off] if 0 <= off < len(values) else None
+
+    sarjat = {}
+    for a in haettavat:
+        sarja = []
+        for y in years_all:
+            v = value_at(**{v_time: y, v_area: a})
+            sarja.append(None if v is None else round(float(v), 1))
+        if any(x is not None for x in sarja):
+            sarjat[a] = {"nimi": labels.get(a, a), "sarja": sarja}
+
+    data = {
+        "perusvuosi": 2015,
+        "selite": ("Vanhojen osakeasuntojen laatuvakioitu hintaindeksi "
+                   "(2015=100), Tilastokeskus (StatFin ashi 13mz)."),
+        "vuodet": [int(y) for y in years_all],
+        "alueet": sarjat,
+        "kunnat": {k: KUNTA_INDEX_AREA[k] for k in kunnat
+                   if k in KUNTA_INDEX_AREA
+                   and KUNTA_INDEX_AREA[k] in sarjat},
+    }
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"[indeksi] Kirjoitettu {out_path}: {len(sarjat)} aluetta, "
+          f"{len(data['kunnat'])} kuntaa.")
+    return len(sarjat)
+
+
 def apply_modeled_rent(features):
     """Kun postinumerohinta on aitoa dataa mutta vuokra jäisi kuntatason
     keskiarvoon (peitetty), arvioidaan vuokra alueen OMASTA hinnasta kunnan
@@ -854,6 +1085,9 @@ def main():
                     help="Älä mallinna vuokraa alueille, joilla hinta on aitoa "
                          "mutta vuokra peitetty; jätä ne kuntatason keskiarvoon "
                          "(oletuksena vuokra mallinnetaan).")
+    ap.add_argument("--no-index", action="store_true",
+                    help="Älä hae hintaindeksiä äläkä kirjoita history.json:ia "
+                         "(oletuksena haetaan).")
     ap.add_argument("--out", default="postal_yields.geojson")
     args = ap.parse_args()
 
@@ -1068,6 +1302,19 @@ def main():
     # laskurit mallinnuksen jälkeen (osa taso='kunta' muuttui 'malli'ksi)
     n_fallback = sum(1 for f in out_features
                      if f["properties"].get("taso") == "kunta")
+
+    # --- Vaihe 2d: hintakehitys (laatuvakioitu indeksi) -> history.json ----
+    # Ei kriittinen: jos haku epäonnistuu, sivut rakentuvat ilman kuvaajaa.
+    if not args.no_index:
+        try:
+            kunnat = sorted({f["properties"].get("kunta")
+                             for f in out_features
+                             if f["properties"].get("brutto_pct") is not None
+                             and f["properties"].get("vakiluku")
+                             and f["properties"].get("kunta")})
+            fetch_price_index(kunnat)
+        except Exception as e:  # noqa: BLE001
+            print(f"[indeksi] Ohitettiin virheen vuoksi: {e}")
 
     fc = {
         "type": "FeatureCollection",

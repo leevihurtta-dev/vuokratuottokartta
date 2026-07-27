@@ -48,6 +48,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;
 color:var(--soft)}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .btn{display:inline-block;background:var(--petrol);color:#fff;font-weight:600;
 padding:11px 18px;border-radius:8px;text-decoration:none;margin:10px 0}
+.spark{width:100%;height:auto;max-width:620px;display:block;margin:10px 0 4px}
 .note{background:var(--warn-bg);color:var(--warn);border-radius:8px;
 padding:10px 12px;font-size:13.5px;margin:14px 0}
 footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
@@ -200,6 +201,134 @@ def fnum(v, dec=0, unit=""):
         return "–"
     s = f"{v:,.{dec}f}".replace(",", " ").replace(".", ",")
     return s + ("\u00a0" + unit if unit else "")
+
+
+HISTORY_FILE = "history.json"
+
+
+def load_history():
+    """Lukee history.json:in, jos se on olemassa. Puuttuminen ei ole virhe –
+    sivut rakentuvat silloin ilman hintakehitysosiota."""
+    try:
+        with open(HISTORY_FILE, encoding="utf-8") as f:
+            h = json.load(f)
+        if h.get("vuodet") and h.get("alueet"):
+            return h
+    except FileNotFoundError:
+        pass
+    except Exception as e:  # noqa: BLE001
+        print(f"  (history.json ohitettiin: {e})")
+    return None
+
+
+def sparkline_svg(years, series, label):
+    """Viivakuvaaja inline-SVG:nä. Ei JavaScriptiä eikä kirjastoja, joten
+    sivut pysyvät kevyinä ja kuvaaja näkyy myös ilman skriptejä."""
+    pts = [(y, v) for y, v in zip(years, series) if v is not None]
+    if len(pts) < 3:
+        return ""
+    W, H = 620, 170
+    ml, mr, mt, mb = 38, 10, 12, 24
+    vals = [v for _, v in pts]
+    lo, hi = min(vals), max(vals)
+    if hi - lo < 1:
+        lo, hi = lo - 1, hi + 1
+    pad = (hi - lo) * 0.12
+    lo, hi = lo - pad, hi + pad
+    x0, x1 = pts[0][0], pts[-1][0]
+
+    def px(y):
+        return ml + (y - x0) / max(1, (x1 - x0)) * (W - ml - mr)
+
+    def py(v):
+        return mt + (hi - v) / (hi - lo) * (H - mt - mb)
+
+    line = " ".join(f"{px(y):.1f},{py(v):.1f}" for y, v in pts)
+    area = (f"{px(x0):.1f},{H - mb:.1f} " + line
+            + f" {px(x1):.1f},{H - mb:.1f}")
+    base = ""
+    if lo < 100 < hi:
+        yb = py(100)
+        base = (f'<line x1="{ml}" y1="{yb:.1f}" x2="{W - mr}" y2="{yb:.1f}" '
+                f'stroke="#c8cec6" stroke-width="1" stroke-dasharray="3 3"/>'
+                f'<text x="{ml - 6}" y="{yb + 4:.1f}" text-anchor="end" '
+                f'font-size="11" fill="#8b958c">100</text>')
+    last_y, last_v = pts[-1]
+    ticks = (f'<text x="{px(x0):.1f}" y="{H - 7}" font-size="11" '
+             f'fill="#55606c">{x0}</text>'
+             f'<text x="{px(x1):.1f}" y="{H - 7}" text-anchor="end" '
+             f'font-size="11" fill="#55606c">{x1}</text>')
+    return (
+        f'<svg class="spark" viewBox="0 0 {W} {H}" role="img" '
+        f'aria-label="{esc(label)}" xmlns="http://www.w3.org/2000/svg">'
+        f'<polygon points="{area}" fill="#0e5f57" fill-opacity="0.08"/>'
+        f'{base}'
+        f'<polyline points="{line}" fill="none" stroke="#0e5f57" '
+        f'stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
+        f'<circle cx="{px(last_y):.1f}" cy="{py(last_v):.1f}" r="4" '
+        f'fill="#0e5f57"/>'
+        f'{ticks}</svg>')
+
+
+def price_trend_section(kunta, hist, on_kuntasivu=False):
+    """Hintakehitysosio: laatuvakioitu hintaindeksi siltä alueelta, johon
+    kunta kuuluu. Indeksiä ei ole postinumerotasolla, joten teksti sanoo
+    selvästi että kyse on seudun kehityksestä."""
+    if not hist or not kunta:
+        return ""
+    code = (hist.get("kunnat") or {}).get(kunta)
+    if not code:
+        return ""
+    entry = (hist.get("alueet") or {}).get(code)
+    if not entry:
+        return ""
+    years = hist.get("vuodet") or []
+    series = entry.get("sarja") or []
+    pts = [(y, v) for y, v in zip(years, series) if v is not None]
+    if len(pts) < 3:
+        return ""
+    nimi = entry.get("nimi") or kunta
+    last_y, last_v = pts[-1]
+    first_y, first_v = pts[0]
+
+    def pct(a, b):
+        return (b - a) / a * 100 if a else 0.0
+
+    def sanoin(x):
+        if x > 1:
+            return f"noussut {fnum(abs(x), 1)} %"
+        if x < -1:
+            return f"laskenut {fnum(abs(x), 1)} %"
+        return "pysynyt lähes ennallaan"
+
+    lauseet = [f"{esc(nimi)}: vanhojen osakeasuntojen hintataso on "
+               f"{sanoin(pct(first_v, last_v))} vuodesta {first_y} vuoteen "
+               f"{last_y}."]
+    aiemmat = [(y, v) for y, v in pts if y <= last_y - 5]
+    if aiemmat:
+        y5, v5 = aiemmat[-1]
+        muutos = pct(v5, last_v)
+        lauseet.append(f"Viimeisen {last_y - y5} vuoden aikana muutos on "
+                       f"{'+' if muutos > 0 else ''}{fnum(muutos, 1)} %.")
+    svg = sparkline_svg(years, series,
+                        f"{nimi}: hintaindeksi {first_y}–{last_y}")
+    if on_kuntasivu:
+        tarkenne = (f"Kuvaaja esittää laatuvakioitua hintaindeksiä "
+                    f"(2015=100). Aluejako: <strong>{esc(nimi)}</strong>.")
+    else:
+        tarkenne = (f"Kuvaaja esittää laatuvakioitua hintaindeksiä "
+                    f"(2015=100). Aluejako: <strong>{esc(nimi)}</strong> – "
+                    f"indeksi kuvaa koko tämän alueen kehitystä, ei "
+                    f"yksittäisen postinumeron, koska Tilastokeskus ei "
+                    f"julkaise hintaindeksiä postinumerotasolla.")
+    return (
+        '<h2>Hintakehitys</h2>'
+        + svg
+        + f'<p>{" ".join(lauseet)}</p>'
+        + f'<p class="note">{tarkenne} Laatuvakiointi poistaa myytyjen '
+          f'asuntojen koostumuksen vaikutuksen, joten indeksi kuvaa '
+          f'hintamuutosta luotettavammin kuin neliöhintojen vertailu '
+          f'vuosien välillä.</p>')
 
 
 def page(title, description, canonical, body, breadcrumb="", jsonld=None,
@@ -433,7 +562,8 @@ varainsiirtoveroa. Nettotuoton oletuksia voi säätää
     return html_out, faq_jsonld
 
 
-def area_page(p, kausi, kunta_areas, national_median, neighbours):
+def area_page(p, kausi, kunta_areas, national_median, neighbours,
+               hist=None):
     code, nimi, kunta = p["posti_alue"], p.get("nimi") or p["posti_alue"], p.get("kunta") or ""
     kslug = slugify(kunta)
     title = f"Vuokratuotto {nimi} ({code}), {kunta} – {fnum(p['brutto_pct'], 2)} %"
@@ -486,6 +616,7 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
     kb = sorted(a["brutto_pct"] for a in kunta_areas
                 if a.get("brutto_pct") is not None)
     kunta_median = kb[len(kb) // 2] if kb else None
+    trend_html = price_trend_section(kunta, hist)
     extras_html, faq_jsonld = area_extras(p, kausi, national_median,
                                           kunta_median)
 
@@ -499,6 +630,7 @@ def area_page(p, kausi, kunta_areas, national_median, neighbours):
 <table>{trs}</table>
 {note}
 {extras_html}
+{trend_html}
 {nb_html}
 <p>Vertaa muihin alueisiin: <a href="/kunta/{kslug}/">kaikki kunnan
 {esc(kunta)} postinumeroalueet</a> tai <a href="/alueet/">koko Suomen
@@ -556,7 +688,7 @@ varainsiirtovero) voit säätää itse <a href="/#{esc(code)}">kartalla</a>.</p>
     return page(title, desc, canonical, body, bc, jsonld)
 
 
-def kunta_page(kunta, areas, kausi):
+def kunta_page(kunta, areas, kausi, hist=None):
     kslug = slugify(kunta)
     areas = sorted(areas, key=lambda p: p["brutto_pct"], reverse=True)
     title = f"Vuokratuotot {kunta} postinumeroittain – {len(areas)} aluetta"
@@ -572,6 +704,7 @@ def kunta_page(kunta, areas, kausi):
         f'<td class=num>{fnum(p["vuokra_eur_m2"], 2, "€/m²")}</td>'
         f'<td class=num>{fnum(p["n_kaupat"])}</td></tr>'
         for p in areas)
+    trend_html = price_trend_section(kunta, hist, on_kuntasivu=True)
     body = f"""
 <h1>Vuokratuotot: {esc(kunta)}</h1>
 <p class="lead">{len(areas)} postinumeroaluetta · tilastovuosi {esc(kausi)} ·
@@ -584,6 +717,7 @@ järjestetty bruttotuoton mukaan</p>
 <p class="note">※ = luvussa on käytetty kuntatason keskiarvoa, koska
 postinumerotason tieto on peitetty. △ = vuokra ja tuotto on arvioitu alueen
 neliöhinnasta (postinumerotason vuokraa ei julkaista).</p>
+{trend_html}
 <p><a class="btn" href="/">Avaa koko kartta</a></p>"""
     bc = f' › {esc(kunta)}'
     return page(title, desc, f"{BASE_URL}/kunta/{kslug}/", body, bc)
@@ -756,6 +890,12 @@ def main():
     # vinoutuisi ylös lukuisten halpojen muuttotappioalueiden korkeista
     # bruttotuotoista (joilla harva asunto oikeasti vaihtaa omistajaa).
     national_median = weighted_median(areas, "brutto_pct", "n_kaupat")
+    hist = load_history()
+    if hist:
+        print(f"  Hintakehitys: {len(hist.get('alueet', {}))} indeksialuetta, "
+              f"{len(hist.get('kunnat', {}))} kuntaa.")
+    else:
+        print("  Hintakehitys: history.json puuttuu – kuvaajat jätetään pois.")
 
     # Keskipisteet naapurihakua varten (kevyt bbox-keskikohta geometriasta).
     centroids = {}
@@ -786,14 +926,14 @@ def main():
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
             f.write(area_page(p, kausi, kunta_areas, national_median,
-                              neighbours))
+                              neighbours, hist))
         urls.append(f"{BASE_URL}/alue/{code}/")
 
     for kunta, plist in by_kunta.items():
         d = os.path.join("kunta", slugify(kunta))
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
-            f.write(kunta_page(kunta, plist, kausi))
+            f.write(kunta_page(kunta, plist, kausi, hist))
         urls.append(f"{BASE_URL}/kunta/{slugify(kunta)}/")
 
     os.makedirs("alueet", exist_ok=True)
