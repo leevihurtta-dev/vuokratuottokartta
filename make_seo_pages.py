@@ -22,6 +22,7 @@ Käyttö: python make_seo_pages.py
 import datetime as _dt
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -221,20 +222,46 @@ def load_history():
     return None
 
 
+def _nice_ticks(lo, hi, target=7):
+    """Valitsee 'siistit' asteikkoarvot (1, 2, 5, 10 x 10^n). Tasaluvut
+    pidetään tarkoituksella, jotta akselin arvot on helppo lukea."""
+    span = max(hi - lo, 1e-9)
+    raw = span / max(1, target)
+    mag = 10 ** math.floor(math.log10(raw))
+    for m in (1, 2, 5, 10):
+        if raw <= m * mag:
+            step = m * mag
+            break
+    else:
+        step = 10 * mag
+    start = math.floor(lo / step) * step
+    ticks = []
+    v = start
+    while v <= hi + step * 0.001:
+        if v >= lo - step * 0.001:
+            ticks.append(round(v, 6))
+        v += step
+    return ticks
+
+
 def sparkline_svg(years, series, label):
-    """Viivakuvaaja inline-SVG:nä. Ei JavaScriptiä eikä kirjastoja, joten
-    sivut pysyvät kevyinä ja kuvaaja näkyy myös ilman skriptejä."""
+    """Viivakuvaaja inline-SVG:nä: y-akselilla indeksiasteikko, x-akselilla
+    vuodet, ja jokaisella vuosipisteellä oma arvo + vuosimuutos (näkyy
+    osoittimen alla). Ei JavaScriptiä eikä kirjastoja."""
     pts = [(y, v) for y, v in zip(years, series) if v is not None]
     if len(pts) < 3:
         return ""
-    W, H = 620, 170
-    ml, mr, mt, mb = 38, 10, 12, 24
+    W, H = 660, 250
+    ml, mr, mt, mb = 46, 14, 16, 34
     vals = [v for _, v in pts]
     lo, hi = min(vals), max(vals)
-    if hi - lo < 1:
-        lo, hi = lo - 1, hi + 1
-    pad = (hi - lo) * 0.12
+    if hi - lo < 2:
+        lo, hi = lo - 2, hi + 2
+    pad = (hi - lo) * 0.15
     lo, hi = lo - pad, hi + pad
+    ticks = _nice_ticks(lo, hi)
+    if ticks:
+        lo, hi = min(lo, ticks[0]), max(hi, ticks[-1])
     x0, x1 = pts[0][0], pts[-1][0]
 
     def px(y):
@@ -243,31 +270,66 @@ def sparkline_svg(years, series, label):
     def py(v):
         return mt + (hi - v) / (hi - lo) * (H - mt - mb)
 
+    parts = []
+    # --- y-akselin apuviivat ja arvot ---
+    for t in ticks:
+        yy = py(t)
+        on100 = abs(t - 100) < 1e-9
+        parts.append(
+            f'<line x1="{ml}" y1="{yy:.1f}" x2="{W - mr}" y2="{yy:.1f}" '
+            f'stroke="{"#a9b3a9" if on100 else "#e2e6df"}" stroke-width="1"'
+            f'{" stroke-dasharray=\"4 3\"" if on100 else ""}/>')
+        parts.append(
+            f'<text x="{ml - 7}" y="{yy + 4:.1f}" text-anchor="end" '
+            f'font-size="11.5" fill="{"#55606c" if on100 else "#8b958c"}">'
+            f'{fnum(t, 0)}</text>')
+    # --- x-akselin vuodet: noin 5-6 merkintää tasavälein ---
+    n = len(pts)
+    step = max(1, round((x1 - x0) / 5))
+    xlabels = [y for y in range(x0, x1 + 1, step)]
+    if xlabels[-1] != x1:
+        xlabels.append(x1)
+    for y in xlabels:
+        xx = px(y)
+        parts.append(
+            f'<line x1="{xx:.1f}" y1="{H - mb:.1f}" x2="{xx:.1f}" '
+            f'y2="{H - mb + 4:.1f}" stroke="#c8cec6" stroke-width="1"/>')
+        anchor = ("start" if y == x0 else
+                  "end" if y == x1 else "middle")
+        parts.append(
+            f'<text x="{xx:.1f}" y="{H - mb + 17:.1f}" text-anchor="{anchor}" '
+            f'font-size="11.5" fill="#55606c">{y}</text>')
+    # --- viiva ja täyttö ---
     line = " ".join(f"{px(y):.1f},{py(v):.1f}" for y, v in pts)
-    area = (f"{px(x0):.1f},{H - mb:.1f} " + line
-            + f" {px(x1):.1f},{H - mb:.1f}")
-    base = ""
-    if lo < 100 < hi:
-        yb = py(100)
-        base = (f'<line x1="{ml}" y1="{yb:.1f}" x2="{W - mr}" y2="{yb:.1f}" '
-                f'stroke="#c8cec6" stroke-width="1" stroke-dasharray="3 3"/>'
-                f'<text x="{ml - 6}" y="{yb + 4:.1f}" text-anchor="end" '
-                f'font-size="11" fill="#8b958c">100</text>')
-    last_y, last_v = pts[-1]
-    ticks = (f'<text x="{px(x0):.1f}" y="{H - 7}" font-size="11" '
-             f'fill="#55606c">{x0}</text>'
-             f'<text x="{px(x1):.1f}" y="{H - 7}" text-anchor="end" '
-             f'font-size="11" fill="#55606c">{x1}</text>')
+    parts.append(
+        f'<polygon points="{px(x0):.1f},{H - mb:.1f} {line} '
+        f'{px(x1):.1f},{H - mb:.1f}" fill="#0e5f57" fill-opacity="0.07"/>')
+    parts.append(
+        f'<polyline points="{line}" fill="none" stroke="#0e5f57" '
+        f'stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>')
+    # --- pisteet: arvo ja vuosimuutos osoittimen alla (<title>) ---
+    for i, (y, v) in enumerate(pts):
+        if i:
+            pv = pts[i - 1][1]
+            ch = (v - pv) / pv * 100 if pv else 0
+            vm = f", vuosimuutos {'+' if ch > 0 else ''}{fnum(ch, 1)} %"
+        else:
+            vm = ""
+        last = (i == len(pts) - 1)
+        parts.append(
+            f'<circle cx="{px(y):.1f}" cy="{py(v):.1f}" '
+            f'r="{4.5 if last else 3}" fill="{"#0e5f57" if last else "#fff"}" '
+            f'stroke="#0e5f57" stroke-width="{2 if last else 1.5}">'
+            f'<title>{y}: {fnum(v, 1)}{vm}</title></circle>')
+    # --- viimeisin arvo lukuna ---
+    parts.append(
+        f'<text x="{px(x1) - 8:.1f}" y="{py(pts[-1][1]) - 11:.1f}" '
+        f'text-anchor="end" font-size="12.5" font-weight="700" '
+        f'fill="#0e5f57">{fnum(pts[-1][1], 1)}</text>')
     return (
         f'<svg class="spark" viewBox="0 0 {W} {H}" role="img" '
         f'aria-label="{esc(label)}" xmlns="http://www.w3.org/2000/svg">'
-        f'<polygon points="{area}" fill="#0e5f57" fill-opacity="0.08"/>'
-        f'{base}'
-        f'<polyline points="{line}" fill="none" stroke="#0e5f57" '
-        f'stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
-        f'<circle cx="{px(last_y):.1f}" cy="{py(last_v):.1f}" r="4" '
-        f'fill="#0e5f57"/>'
-        f'{ticks}</svg>')
+        + "".join(parts) + '</svg>')
 
 
 def price_trend_section(kunta, hist, on_kuntasivu=False):
